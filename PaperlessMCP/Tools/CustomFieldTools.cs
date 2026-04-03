@@ -14,7 +14,7 @@ namespace PaperlessMCP.Tools;
 [McpServerToolType]
 public static class CustomFieldTools
 {
-    [McpServerTool(Name = "paperless.custom_fields.list")]
+    [McpServerTool(Name = "paperless-custom_fields-list")]
     [Description("List all custom field definitions with pagination.")]
     public static async Task<string> List(
         PaperlessClient client,
@@ -37,7 +37,7 @@ public static class CustomFieldTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.custom_fields.get")]
+    [McpServerTool(Name = "paperless-custom_fields-get")]
     [Description("Get a custom field definition by its ID.")]
     public static async Task<string> Get(
         PaperlessClient client,
@@ -62,7 +62,7 @@ public static class CustomFieldTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.custom_fields.create")]
+    [McpServerTool(Name = "paperless-custom_fields-create")]
     [Description("Create a new custom field definition.")]
     public static async Task<string> Create(
         PaperlessClient client,
@@ -114,7 +114,7 @@ public static class CustomFieldTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.custom_fields.update")]
+    [McpServerTool(Name = "paperless-custom_fields-update")]
     [Description("Update an existing custom field definition.")]
     public static async Task<string> Update(
         PaperlessClient client,
@@ -165,7 +165,7 @@ public static class CustomFieldTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.custom_fields.delete")]
+    [McpServerTool(Name = "paperless-custom_fields-delete")]
     [Description("Delete a custom field definition. Requires explicit confirmation.")]
     public static async Task<string> Delete(
         PaperlessClient client,
@@ -214,7 +214,7 @@ public static class CustomFieldTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.custom_fields.assign")]
+    [McpServerTool(Name = "paperless-custom_fields-assign")]
     [Description("Assign a custom field value to a document.")]
     public static async Task<string> Assign(
         PaperlessClient client,

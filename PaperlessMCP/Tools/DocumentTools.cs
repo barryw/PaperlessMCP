@@ -14,7 +14,7 @@ namespace PaperlessMCP.Tools;
 [McpServerToolType]
 public static class DocumentTools
 {
-    [McpServerTool(Name = "paperless.documents.search")]
+    [McpServerTool(Name = "paperless-documents-search")]
     [Description("Search for documents with full-text search and filters. Supports pagination.")]
     public static async Task<string> Search(
         PaperlessClient client,
@@ -82,7 +82,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.get")]
+    [McpServerTool(Name = "paperless-documents-get")]
     [Description("Get a document by its ID.")]
     public static async Task<string> Get(
         PaperlessClient client,
@@ -107,7 +107,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.download")]
+    [McpServerTool(Name = "paperless-documents-download")]
     [Description("Get download URLs for a document's original file, preview, and thumbnail.")]
     public static async Task<string> Download(
         PaperlessClient client,
@@ -134,7 +134,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.preview")]
+    [McpServerTool(Name = "paperless-documents-preview")]
     [Description("Get the preview URL for a document.")]
     public static async Task<string> Preview(
         PaperlessClient client,
@@ -161,7 +161,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.thumbnail")]
+    [McpServerTool(Name = "paperless-documents-thumbnail")]
     [Description("Get the thumbnail URL for a document.")]
     public static async Task<string> Thumbnail(
         PaperlessClient client,
@@ -188,7 +188,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.upload")]
+    [McpServerTool(Name = "paperless-documents-upload")]
     [Description("Upload a new document to Paperless-ngx. Provide file content as base64. For large files, use paperless.documents.upload_from_path instead.")]
     public static async Task<string> Upload(
         PaperlessClient client,
@@ -247,7 +247,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.upload_from_path")]
+    [McpServerTool(Name = "paperless-documents-upload_from_path")]
     [Description("Upload a document from a local file path. More reliable than base64 upload for large files. Includes automatic retries.")]
     public static async Task<string> UploadFromPath(
         PaperlessClient client,
@@ -326,7 +326,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.update")]
+    [McpServerTool(Name = "paperless-documents-update")]
     [Description("Update document metadata (title, correspondent, type, tags, etc.).")]
     public static async Task<string> Update(
         PaperlessClient client,
@@ -371,7 +371,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.delete")]
+    [McpServerTool(Name = "paperless-documents-delete")]
     [Description("Delete a document. Requires explicit confirmation.")]
     public static async Task<string> Delete(
         PaperlessClient client,
@@ -427,7 +427,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.bulk_update")]
+    [McpServerTool(Name = "paperless-documents-bulk_update")]
     [Description("Perform bulk operations on multiple documents. Supports dry run mode.")]
     public static async Task<string> BulkUpdate(
         PaperlessClient client,
@@ -513,7 +513,7 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.documents.reprocess")]
+    [McpServerTool(Name = "paperless-documents-reprocess")]
     [Description("Reprocess a document's OCR and content extraction.")]
     public static async Task<string> Reprocess(
         PaperlessClient client,

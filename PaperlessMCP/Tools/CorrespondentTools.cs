@@ -14,7 +14,7 @@ namespace PaperlessMCP.Tools;
 [McpServerToolType]
 public static class CorrespondentTools
 {
-    [McpServerTool(Name = "paperless.correspondents.list")]
+    [McpServerTool(Name = "paperless-correspondents-list")]
     [Description("List all correspondents with pagination.")]
     public static async Task<string> List(
         PaperlessClient client,
@@ -38,7 +38,7 @@ public static class CorrespondentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.correspondents.get")]
+    [McpServerTool(Name = "paperless-correspondents-get")]
     [Description("Get a correspondent by its ID.")]
     public static async Task<string> Get(
         PaperlessClient client,
@@ -63,7 +63,7 @@ public static class CorrespondentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.correspondents.create")]
+    [McpServerTool(Name = "paperless-correspondents-create")]
     [Description("Create a new correspondent.")]
     public static async Task<string> Create(
         PaperlessClient client,
@@ -97,7 +97,7 @@ public static class CorrespondentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.correspondents.update")]
+    [McpServerTool(Name = "paperless-correspondents-update")]
     [Description("Update an existing correspondent.")]
     public static async Task<string> Update(
         PaperlessClient client,
@@ -132,7 +132,7 @@ public static class CorrespondentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.correspondents.delete")]
+    [McpServerTool(Name = "paperless-correspondents-delete")]
     [Description("Delete a correspondent. Requires explicit confirmation.")]
     public static async Task<string> Delete(
         PaperlessClient client,
@@ -181,7 +181,7 @@ public static class CorrespondentTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.correspondents.bulk_delete")]
+    [McpServerTool(Name = "paperless-correspondents-bulk_delete")]
     [Description("Delete multiple correspondents. Supports dry run mode.")]
     public static async Task<string> BulkDelete(
         PaperlessClient client,

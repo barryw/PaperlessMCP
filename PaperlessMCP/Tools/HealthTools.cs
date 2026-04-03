@@ -12,7 +12,7 @@ namespace PaperlessMCP.Tools;
 [McpServerToolType]
 public static class HealthTools
 {
-    [McpServerTool(Name = "paperless.ping")]
+    [McpServerTool(Name = "paperless-ping")]
     [Description("Verify connectivity and authentication with the Paperless-ngx instance. Returns server version if available.")]
     public static async Task<string> Ping(PaperlessClient client)
     {
@@ -35,7 +35,7 @@ public static class HealthTools
         return JsonSerializer.Serialize(errorResponse);
     }
 
-    [McpServerTool(Name = "paperless.capabilities")]
+    [McpServerTool(Name = "paperless-capabilities")]
     [Description("Return supported API endpoints and detected Paperless-ngx version information.")]
     public static async Task<string> GetCapabilities(PaperlessClient client)
     {

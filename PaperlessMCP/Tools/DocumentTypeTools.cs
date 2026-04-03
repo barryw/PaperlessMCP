@@ -14,7 +14,7 @@ namespace PaperlessMCP.Tools;
 [McpServerToolType]
 public static class DocumentTypeTools
 {
-    [McpServerTool(Name = "paperless.document_types.list")]
+    [McpServerTool(Name = "paperless-document_types-list")]
     [Description("List all document types with pagination.")]
     public static async Task<string> List(
         PaperlessClient client,
@@ -38,7 +38,7 @@ public static class DocumentTypeTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.document_types.get")]
+    [McpServerTool(Name = "paperless-document_types-get")]
     [Description("Get a document type by its ID.")]
     public static async Task<string> Get(
         PaperlessClient client,
@@ -63,7 +63,7 @@ public static class DocumentTypeTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.document_types.create")]
+    [McpServerTool(Name = "paperless-document_types-create")]
     [Description("Create a new document type.")]
     public static async Task<string> Create(
         PaperlessClient client,
@@ -97,7 +97,7 @@ public static class DocumentTypeTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.document_types.update")]
+    [McpServerTool(Name = "paperless-document_types-update")]
     [Description("Update an existing document type.")]
     public static async Task<string> Update(
         PaperlessClient client,
@@ -132,7 +132,7 @@ public static class DocumentTypeTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.document_types.delete")]
+    [McpServerTool(Name = "paperless-document_types-delete")]
     [Description("Delete a document type. Requires explicit confirmation.")]
     public static async Task<string> Delete(
         PaperlessClient client,
@@ -181,7 +181,7 @@ public static class DocumentTypeTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.document_types.bulk_delete")]
+    [McpServerTool(Name = "paperless-document_types-bulk_delete")]
     [Description("Delete multiple document types. Supports dry run mode.")]
     public static async Task<string> BulkDelete(
         PaperlessClient client,
