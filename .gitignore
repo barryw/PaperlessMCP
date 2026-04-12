@@ -26,6 +26,11 @@ artifacts/
 # macOS
 .DS_Store
 
+# Node (not used, ignore any accidentally generated files)
+node_modules/
+package-lock.json
+package.json
+
 # Test results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
