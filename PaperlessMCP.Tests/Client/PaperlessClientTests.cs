@@ -488,10 +488,11 @@ public class PaperlessClientTests : IDisposable
         _factory.SetupPost("api/documents/bulk_edit/", "{}");
 
         // Act
-        var result = await _factory.Client.BulkEditDocumentsAsync([1, 2, 3], "add_tag", new { tag = 5 });
+        var (success, error) = await _factory.Client.BulkEditDocumentsAsync([1, 2, 3], "add_tag", new { tag = 5 });
 
         // Assert
-        result.Should().BeTrue();
+        success.Should().BeTrue();
+        error.Should().BeNull();
     }
 
     [Fact]

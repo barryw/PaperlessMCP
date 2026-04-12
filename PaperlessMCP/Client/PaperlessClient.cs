@@ -412,7 +412,7 @@ public class PaperlessClient
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var requestUri = new Uri(_httpClient.BaseAddress!, "api/documents/bulk_edit/");
-            _logger.LogInformation("MANUAL POST to {Url} with body: {Json}", requestUri, json);
+            _logger.LogDebug("POST {Url} body: {Json}", requestUri, json);
 
             var response = await _httpClient.PostAsync("api/documents/bulk_edit/", content, cancellationToken).ConfigureAwait(false);
             
@@ -701,7 +701,7 @@ public class PaperlessClient
         try
         {
             var body = JsonSerializer.Serialize(request, request.GetType(), JsonOptions);
-            _logger.LogInformation("POST {Url} with body: {Body}", url, body);
+            _logger.LogDebug("POST {Url} body: {Body}", url, body);
             var content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
 
@@ -728,7 +728,7 @@ public class PaperlessClient
         try
         {
             var body = JsonSerializer.Serialize(request, request.GetType(), JsonOptions);
-            _logger.LogInformation("PATCH {Url} with body: {Body}", url, body);
+            _logger.LogDebug("PATCH {Url} body: {Body}", url, body);
             var content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.PatchAsync(url, content, cancellationToken).ConfigureAwait(false);
 
