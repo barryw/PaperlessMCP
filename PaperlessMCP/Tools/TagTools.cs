@@ -14,7 +14,7 @@ namespace PaperlessMCP.Tools;
 [McpServerToolType]
 public static class TagTools
 {
-    [McpServerTool(Name = "paperless.tags.list")]
+    [McpServerTool(Name = "paperless-tags-list")]
     [Description("List all tags with pagination.")]
     public static async Task<string> List(
         PaperlessClient client,
@@ -38,7 +38,7 @@ public static class TagTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.tags.get")]
+    [McpServerTool(Name = "paperless-tags-get")]
     [Description("Get a tag by its ID.")]
     public static async Task<string> Get(
         PaperlessClient client,
@@ -63,7 +63,7 @@ public static class TagTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.tags.create")]
+    [McpServerTool(Name = "paperless-tags-create")]
     [Description("Create a new tag.")]
     public static async Task<string> Create(
         PaperlessClient client,
@@ -105,7 +105,7 @@ public static class TagTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.tags.update")]
+    [McpServerTool(Name = "paperless-tags-update")]
     [Description("Update an existing tag.")]
     public static async Task<string> Update(
         PaperlessClient client,
@@ -146,7 +146,7 @@ public static class TagTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.tags.delete")]
+    [McpServerTool(Name = "paperless-tags-delete")]
     [Description("Delete a tag. Requires explicit confirmation.")]
     public static async Task<string> Delete(
         PaperlessClient client,
@@ -195,7 +195,7 @@ public static class TagTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.tags.bulk_delete")]
+    [McpServerTool(Name = "paperless-tags-bulk-delete")]
     [Description("Delete multiple tags. Supports dry run mode.")]
     public static async Task<string> BulkDelete(
         PaperlessClient client,

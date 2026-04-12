@@ -14,7 +14,7 @@ namespace PaperlessMCP.Tools;
 [McpServerToolType]
 public static class StoragePathTools
 {
-    [McpServerTool(Name = "paperless.storage_paths.list")]
+    [McpServerTool(Name = "paperless-storage-paths-list")]
     [Description("List all storage paths with pagination.")]
     public static async Task<string> List(
         PaperlessClient client,
@@ -38,7 +38,7 @@ public static class StoragePathTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.storage_paths.get")]
+    [McpServerTool(Name = "paperless-storage-paths-get")]
     [Description("Get a storage path by its ID.")]
     public static async Task<string> Get(
         PaperlessClient client,
@@ -63,7 +63,7 @@ public static class StoragePathTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.storage_paths.create")]
+    [McpServerTool(Name = "paperless-storage-paths-create")]
     [Description("Create a new storage path.")]
     public static async Task<string> Create(
         PaperlessClient client,
@@ -99,7 +99,7 @@ public static class StoragePathTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.storage_paths.update")]
+    [McpServerTool(Name = "paperless-storage-paths-update")]
     [Description("Update an existing storage path.")]
     public static async Task<string> Update(
         PaperlessClient client,
@@ -136,7 +136,7 @@ public static class StoragePathTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.storage_paths.delete")]
+    [McpServerTool(Name = "paperless-storage-paths-delete")]
     [Description("Delete a storage path. Requires explicit confirmation.")]
     public static async Task<string> Delete(
         PaperlessClient client,
@@ -185,7 +185,7 @@ public static class StoragePathTools
         return JsonSerializer.Serialize(response);
     }
 
-    [McpServerTool(Name = "paperless.storage_paths.bulk_delete")]
+    [McpServerTool(Name = "paperless-storage-paths-bulk-delete")]
     [Description("Delete multiple storage paths. Supports dry run mode.")]
     public static async Task<string> BulkDelete(
         PaperlessClient client,
