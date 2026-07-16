@@ -796,4 +796,207 @@ public class DocumentToolsTests : IDisposable
     }
 
     #endregion
+
+    #region Title Length Validation Tests
+
+    // Paperless-ngx stores at most 127 characters of a document title: the model says
+    // max_length=128, but the consumer does Document.objects.create(title=title[:127]),
+    // and the upload serializer runs no length validation at all. A longer title is
+    // therefore truncated silently while the API reports success. These tests pin the
+    // boundary at 127 across all three write paths.
+
+    private const int TitleLimit = 127;
+    private static string TitleOfLength(int length) => new('A', length);
+
+    [Fact]
+    public async Task Upload_WithTitleAtLimit_Succeeds()
+    {
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        _factory.MockHandler
+            .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+            .Respond("application/json", "\"task-uuid-12345\"");
+
+        // Act
+        var result = await DocumentTools.Upload(
+            _factory.Client,
+            fileContent,
+            "test.pdf",
+            title: TitleOfLength(TitleLimit));
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+        json.RootElement.GetProperty("warnings").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Upload_WithTitleOverLimit_ReturnsValidationErrorAndSendsNothing()
+    {
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        var upload = _factory.MockHandler
+            .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+            .Respond("application/json", "\"task-uuid-12345\"");
+
+        // Act
+        var result = await DocumentTools.Upload(
+            _factory.Client,
+            fileContent,
+            "test.pdf",
+            title: TitleOfLength(TitleLimit + 1));
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+        _factory.MockHandler.GetMatchCount(upload).Should().Be(0, "nothing may reach Paperless when the title is rejected");
+    }
+
+    [Fact]
+    public async Task UploadFromPath_WithTitleAtLimit_Succeeds()
+    {
+        // Arrange
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, "Test file content for upload");
+            _factory.MockHandler
+                .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+                .Respond("application/json", "\"task-uuid-12345\"");
+
+            // Act
+            var result = await DocumentTools.UploadFromPath(
+                _factory.Client,
+                tempFile,
+                title: TitleOfLength(TitleLimit));
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+            json.RootElement.GetProperty("warnings").GetArrayLength().Should().Be(0);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task UploadFromPath_WithTitleOverLimit_ReturnsValidationErrorAndSendsNothing()
+    {
+        // Arrange
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, "Test file content for upload");
+            var upload = _factory.MockHandler
+                .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+                .Respond("application/json", "\"task-uuid-12345\"");
+
+            // Act
+            var result = await DocumentTools.UploadFromPath(
+                _factory.Client,
+                tempFile,
+                title: TitleOfLength(TitleLimit + 1));
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+            json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+            _factory.MockHandler.GetMatchCount(upload).Should().Be(0, "nothing may reach Paperless when the title is rejected");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task UploadFromPath_WithDerivedTitleOverLimit_ReturnsValidationError()
+    {
+        // A title derived from an over-long file name is just as vulnerable to silent
+        // truncation as one passed explicitly, so it must be rejected too.
+        // Arrange
+        var longName = TitleOfLength(TitleLimit + 1) + ".pdf";
+        var tempFile = Path.Combine(Path.GetTempPath(), longName);
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, "Test file content for upload");
+
+            // Act
+            var result = await DocumentTools.UploadFromPath(_factory.Client, tempFile);
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+            json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task Update_WithTitleAtLimit_Succeeds()
+    {
+        // Arrange
+        var title = TitleOfLength(TitleLimit);
+        _factory.SetupPatch("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, title));
+
+        // Act
+        var result = await DocumentTools.Update(_factory.Client, 1, title: title);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+        json.RootElement.GetProperty("result").GetProperty("title").GetString().Should().Be(title);
+    }
+
+    [Fact]
+    public async Task Update_WithTitleOverLimit_ReturnsValidationErrorAndSendsNothing()
+    {
+        // Arrange
+        var patch = _factory.SetupPatch("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "unused"));
+
+        // Act
+        var result = await DocumentTools.Update(_factory.Client, 1, title: TitleOfLength(TitleLimit + 1));
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+        _factory.MockHandler.GetMatchCount(patch).Should().Be(0, "the document must be left untouched when the title is rejected");
+    }
+
+    [Fact]
+    public async Task Update_WithTitleOverLimit_ErrorMessageNamesLimitAndActualLength()
+    {
+        // Act
+        var result = await DocumentTools.Update(_factory.Client, 1, title: TitleOfLength(140));
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        var message = json.RootElement.GetProperty("error").GetProperty("message").GetString();
+        message.Should().Contain("140", "the caller needs to know how long their title actually was");
+        message.Should().Contain("127", "the caller needs to know the limit");
+    }
+
+    [Fact]
+    public async Task Update_WithNullTitle_IsNotRejected()
+    {
+        // A null title means "leave it alone" and must not trip the length check.
+        // Arrange
+        _factory.SetupPatch("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Untouched"));
+
+        // Act
+        var result = await DocumentTools.Update(_factory.Client, 1, correspondent: 5);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+    }
+
+    #endregion
 }
