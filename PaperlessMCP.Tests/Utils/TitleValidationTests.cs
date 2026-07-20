@@ -69,4 +69,55 @@ public class TitleValidationTests
         error.Should().Contain("140");
         error.Should().Contain("127");
     }
+
+    // --- Non-BMP boundary: lengths are Unicode code points, not UTF-16 code units. ---
+    // Paperless truncates with a Python slice (title[:127]) and Python counts code
+    // points; astral-plane characters are 2 UTF-16 units but 1 code point.
+
+    private static string EmojiOfCount(int count) => string.Concat(Enumerable.Repeat("\U0001F600", count));
+
+    [Fact]
+    public void IsValid_CountsCodePoints_NotUtf16Units()
+    {
+        // 64 astral emoji: 128 UTF-16 units, 64 code points. Paperless stores this
+        // intact ([:127] keeps all 64), so it must validate as intact here.
+        var title = EmojiOfCount(64);
+        title.Length.Should().Be(128, "precondition: astral emoji take two UTF-16 units each");
+
+        var valid = TitleValidation.IsValid(title, out var error);
+
+        valid.Should().BeTrue("64 code points are well under the 127 limit");
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public void IsValid_With127AstralRunes_ReturnsTrue()
+    {
+        TitleValidation.IsValid(EmojiOfCount(127), out var error).Should().BeTrue();
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public void IsValid_With128AstralRunes_ReturnsFalse_AndReportsRuneCount()
+    {
+        var title = EmojiOfCount(128);
+        title.Length.Should().Be(256, "precondition: astral emoji take two UTF-16 units each");
+
+        var valid = TitleValidation.IsValid(title, out var error);
+
+        valid.Should().BeFalse("128 code points exceed the 127 limit");
+        error.Should().Contain("128", "the message must report the code-point count");
+        error.Should().NotContain("256", "the UTF-16 unit count would mislead the caller");
+    }
+
+    [Fact]
+    public void IsValid_MixedAsciiAndAstral_AtLimit_ReturnsTrue()
+    {
+        // 126 ASCII + 1 astral emoji = 127 code points (128 UTF-16 units).
+        var title = TitleOfLength(126) + "\U0001F600";
+        title.Length.Should().Be(128, "precondition");
+
+        TitleValidation.IsValid(title, out var error).Should().BeTrue();
+        error.Should().BeNull();
+    }
 }
