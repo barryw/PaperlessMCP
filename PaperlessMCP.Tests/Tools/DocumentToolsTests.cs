@@ -998,5 +998,114 @@ public class DocumentToolsTests : IDisposable
         json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
     }
 
+    // --- Effective-title validation: null/empty titles fall back to the filename stem
+    // (PaperlessClient omits null/empty titles from the request, so Paperless derives
+    // the title from the file name server-side and truncates it just the same). ---
+
+    [Fact]
+    public async Task Upload_WithNullTitleAndShortFileName_Succeeds()
+    {
+        // Regression guard for the base64-null path: no title plus a short filename
+        // must keep working exactly as before.
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        _factory.MockHandler
+            .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+            .Respond("application/json", "\"task-uuid-12345\"");
+
+        // Act
+        var result = await DocumentTools.Upload(_factory.Client, fileContent, "test.pdf");
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+        json.RootElement.GetProperty("warnings").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Upload_WithNullTitleAndOverlongFileNameStem_ReturnsValidationError()
+    {
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        var upload = _factory.MockHandler
+            .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+            .Respond("application/json", "\"task-uuid-12345\"");
+        var fileName = TitleOfLength(TitleLimit + 1) + ".pdf";
+
+        // Act
+        var result = await DocumentTools.Upload(_factory.Client, fileContent, fileName);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+        _factory.MockHandler.GetMatchCount(upload).Should().Be(0, "nothing may reach Paperless when the derived title is rejected");
+    }
+
+    [Fact]
+    public async Task Upload_WithEmptyTitleAndOverlongFileNameStem_ReturnsValidationError()
+    {
+        // An empty title is omitted by PaperlessClient exactly like null, so it must
+        // get the same filename fallback and the same rejection.
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        var fileName = TitleOfLength(TitleLimit + 1) + ".pdf";
+
+        // Act
+        var result = await DocumentTools.Upload(_factory.Client, fileContent, fileName, title: "");
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+    }
+
+    [Fact]
+    public async Task UploadFromPath_WithEmptyTitleAndOverlongFileNameStem_ReturnsValidationError()
+    {
+        // Arrange
+        var longName = TitleOfLength(TitleLimit + 1) + ".pdf";
+        var tempFile = Path.Combine(Path.GetTempPath(), longName);
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, "Test file content for upload");
+
+            // Act
+            var result = await DocumentTools.UploadFromPath(_factory.Client, tempFile, title: "");
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+            json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task Upload_WithAstralTitleOf64CodePoints_Succeeds()
+    {
+        // End-to-end guard for code-point counting: 64 astral emoji are 128 UTF-16
+        // units but only 64 code points; Paperless stores them intact, so the tool
+        // must accept them.
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        _factory.MockHandler
+            .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+            .Respond("application/json", "\"task-uuid-12345\"");
+        var title = string.Concat(Enumerable.Repeat("\U0001F600", 64));
+        title.Length.Should().Be(128, "precondition: astral emoji take two UTF-16 units each");
+
+        // Act
+        var result = await DocumentTools.Upload(_factory.Client, fileContent, "test.pdf", title: title);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+        json.RootElement.GetProperty("warnings").GetArrayLength().Should().Be(0);
+    }
+
     #endregion
 }

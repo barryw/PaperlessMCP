@@ -219,8 +219,14 @@ public static class DocumentTools
         [Description("Created date (YYYY-MM-DD, optional)")] string? created = null)
     {
         // Reject over-long titles before uploading: Paperless truncates them silently
-        // on this path and still reports success. See TitleValidation.
-        if (!TitleValidation.IsValid(title, out var titleError))
+        // on this path and still reports success. Validate the *effective* title: when
+        // title is null or empty, PaperlessClient omits it from the request and Paperless
+        // derives the title from the uploaded file's stem, which is truncated just the
+        // same. See TitleValidation.
+        var effectiveTitle = string.IsNullOrEmpty(title)
+            ? Path.GetFileNameWithoutExtension(fileName)
+            : title;
+        if (!TitleValidation.IsValid(effectiveTitle, out var titleError))
         {
             var errorResponse = McpErrorResponse.Create(
                 ErrorCodes.Validation,
@@ -316,9 +322,13 @@ public static class DocumentTools
             return JsonSerializer.Serialize(errorResponse);
         }
 
-        // Validate the *effective* title: when no title is supplied we derive one from the
-        // file name, and that derived title is just as vulnerable to silent truncation.
-        var effectiveTitle = title ?? Path.GetFileNameWithoutExtension(filePath);
+        // Validate the *effective* title: when no title is supplied (null or empty — an
+        // empty title would be omitted from the request and Paperless would fall back to
+        // the stem server-side anyway) we derive one from the file name, and that derived
+        // title is just as vulnerable to silent truncation.
+        var effectiveTitle = string.IsNullOrEmpty(title)
+            ? Path.GetFileNameWithoutExtension(filePath)
+            : title;
         if (!TitleValidation.IsValid(effectiveTitle, out var titleError))
         {
             var errorResponse = McpErrorResponse.Create(
