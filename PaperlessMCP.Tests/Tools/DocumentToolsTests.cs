@@ -387,6 +387,138 @@ public class DocumentToolsTests : IDisposable
 
     #endregion
 
+    #region Export / base64 Tests
+
+    private static readonly byte[] FakePdfBytes = "%PDF-1.4 fake body"u8.ToArray();
+
+    private void SetupDownloadBytes(int id, byte[] bytes, string mediaType = "application/pdf")
+    {
+        _factory.MockHandler
+            .When(HttpMethod.Get, $"{_factory.Options.BaseUrl}/api/documents/{id}/download/")
+            .Respond(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(bytes)
+                {
+                    Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mediaType) }
+                }
+            });
+    }
+
+    [Fact]
+    public async Task ExportToOutbox_WhenDocumentExists_WritesFileAndReturnsPath()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Path.GetTempPath(), "pmcp-outbox-" + Guid.NewGuid().ToString("N"));
+        _factory.Options.OutboxDirectory = tempDir;
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadBytes(1, FakePdfBytes);
+
+        try
+        {
+            // Act
+            var result = await DocumentTools.ExportToOutbox(_factory.Client, 1);
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+            var res = json.RootElement.GetProperty("result");
+            res.GetProperty("filename").GetString().Should().Be("test_document.pdf");
+            res.GetProperty("mime_type").GetString().Should().Be("application/pdf");
+            res.GetProperty("size_bytes").GetInt32().Should().Be(FakePdfBytes.Length);
+
+            var path = res.GetProperty("path").GetString();
+            path.Should().NotBeNull();
+            File.Exists(path).Should().BeTrue();
+            (await File.ReadAllBytesAsync(path!)).Should().Equal(FakePdfBytes);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExportToOutbox_WhenDocumentNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        _factory.SetupGetWithStatus("api/documents/999/", HttpStatusCode.NotFound);
+
+        // Act
+        var result = await DocumentTools.ExportToOutbox(_factory.Client, 999);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task ExportToOutbox_WithTraversalFilename_StaysInsideOutbox()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Path.GetTempPath(), "pmcp-outbox-" + Guid.NewGuid().ToString("N"));
+        _factory.Options.OutboxDirectory = tempDir;
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadBytes(1, FakePdfBytes);
+
+        try
+        {
+            // Act
+            var result = await DocumentTools.ExportToOutbox(_factory.Client, 1, filename: "../../evil.pdf");
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+            var res = json.RootElement.GetProperty("result");
+            res.GetProperty("filename").GetString().Should().Be("evil.pdf");
+            var path = res.GetProperty("path").GetString()!;
+            Path.GetDirectoryName(Path.GetFullPath(path)).Should().Be(Path.GetFullPath(tempDir));
+            File.Exists(path).Should().BeTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Download_WithReturnBase64_WhenSmall_ReturnsContent()
+    {
+        // Arrange
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadBytes(1, FakePdfBytes);
+
+        // Act
+        var result = await DocumentTools.Download(_factory.Client, 1, returnBase64: true);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+        var res = json.RootElement.GetProperty("result");
+        res.GetProperty("mime_type").GetString().Should().Be("application/pdf");
+        res.GetProperty("size_bytes").GetInt32().Should().Be(FakePdfBytes.Length);
+        Convert.FromBase64String(res.GetProperty("content_base64").GetString()!).Should().Equal(FakePdfBytes);
+    }
+
+    [Fact]
+    public async Task Download_WithReturnBase64_WhenTooLarge_ReturnsValidationError()
+    {
+        // Arrange
+        var bigBytes = new byte[13 * 1024];
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadBytes(1, bigBytes);
+
+        // Act
+        var result = await DocumentTools.Download(_factory.Client, 1, returnBase64: true);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+    }
+
+    #endregion
+
     #region Upload Tests
 
     [Fact]

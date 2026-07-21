@@ -122,11 +122,19 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
+    /// <summary>
+    /// Upper bound on the raw file size returnable inline as base64. base64 inflates by ~4/3
+    /// and the whole tool response must fit the model's tool-output budget, so this is kept
+    /// deliberately small: anything larger must go through paperless_documents_export_to_outbox.
+    /// </summary>
+    private const int MaxInlineBase64Bytes = 12 * 1024;
+
     [McpServerTool(Name = "paperless_documents_download")]
-    [Description("Get download URLs for a document's original file, preview, and thumbnail.")]
+    [Description("Get download URLs for a document's original file, preview, and thumbnail. Set returnBase64=true to also inline the file bytes as base64, but only for tiny files: use paperless_documents_export_to_outbox for anything real.")]
     public static async Task<string> Download(
         PaperlessClient client,
-        [Description("Document ID")] int id)
+        [Description("Document ID")] int id,
+        [Description("Also return the file content as base64 (only allowed for tiny files, ~12 KB). Use paperless_documents_export_to_outbox otherwise.")] bool returnBase64 = false)
     {
         var document = await client.GetDocumentAsync(id).ConfigureAwait(false);
 
@@ -142,11 +150,127 @@ public static class DocumentTools
 
         var downloadInfo = client.GetDocumentDownloadInfo(id, document.Title, document.OriginalFileName);
 
-        var response = McpResponse<DocumentDownload>.Success(
-            downloadInfo,
+        if (!returnBase64)
+        {
+            var response = McpResponse<DocumentDownload>.Success(
+                downloadInfo,
+                new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(response);
+        }
+
+        var (content, contentType, _, error) = await client.DownloadDocumentFileAsync(id).ConfigureAwait(false);
+        if (error != null || content == null)
+        {
+            var errorResponse = McpErrorResponse.Create(
+                ErrorCodes.UpstreamError,
+                $"Failed to download file for document {id}: {error ?? "empty response"}",
+                meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(errorResponse);
+        }
+
+        if (content.Length > MaxInlineBase64Bytes)
+        {
+            var errorResponse = McpErrorResponse.Create(
+                ErrorCodes.Validation,
+                $"File is {content.Length} bytes; too large to inline as base64 (limit {MaxInlineBase64Bytes}). Use paperless_documents_export_to_outbox instead.",
+                meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(errorResponse);
+        }
+
+        var okResponse = McpResponse<object>.Success(
+            new
+            {
+                id,
+                downloadInfo.Title,
+                downloadInfo.OriginalFileName,
+                downloadInfo.DownloadUrl,
+                downloadInfo.PreviewUrl,
+                downloadInfo.ThumbnailUrl,
+                mime_type = contentType,
+                size_bytes = content.Length,
+                content_base64 = Convert.ToBase64String(content)
+            },
             new McpMeta { PaperlessBaseUrl = client.BaseUrl }
         );
-        return JsonSerializer.Serialize(response);
+        return JsonSerializer.Serialize(okResponse);
+    }
+
+    [McpServerTool(Name = "paperless_documents_export_to_outbox")]
+    [Description("Download a document's file server-side and write it into the shared outbox directory, returning its path, filename and MIME type. Lets another MCP server (e.g. Gmail) attach the file by path WITHOUT the bytes passing through the model context. Prefer this over base64 for anything but tiny files.")]
+    public static async Task<string> ExportToOutbox(
+        PaperlessClient client,
+        [Description("Document ID")] int id,
+        [Description("Override the output filename (optional; defaults to the document's original filename). Only the base file name is used; any directory part is ignored.")] string? filename = null,
+        [Description("Export the original uploaded file instead of the archived PDF (optional, default false)")] bool original = false)
+    {
+        var document = await client.GetDocumentAsync(id).ConfigureAwait(false);
+
+        if (document == null)
+        {
+            var errorResponse = McpErrorResponse.Create(
+                ErrorCodes.NotFound,
+                $"Document with ID {id} not found",
+                meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(errorResponse);
+        }
+
+        var (content, contentType, suggestedName, error) = await client.DownloadDocumentFileAsync(id, original).ConfigureAwait(false);
+        if (error != null || content == null)
+        {
+            var errorResponse = McpErrorResponse.Create(
+                ErrorCodes.UpstreamError,
+                $"Failed to download file for document {id}: {error ?? "empty response"}",
+                meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(errorResponse);
+        }
+
+        // Resolve the filename. Path.GetFileName strips any directory part, so a caller-supplied
+        // "../../etc/passwd" collapses to "passwd" and the write stays inside the outbox.
+        var rawName = !string.IsNullOrWhiteSpace(filename) ? filename
+            : !string.IsNullOrWhiteSpace(document.OriginalFileName) ? document.OriginalFileName
+            : !string.IsNullOrWhiteSpace(suggestedName) ? suggestedName
+            : $"document_{id}.pdf";
+        var safeName = Path.GetFileName(rawName.Trim());
+        if (string.IsNullOrWhiteSpace(safeName))
+        {
+            safeName = $"document_{id}.pdf";
+        }
+
+        string fullPath;
+        try
+        {
+            var outboxDir = Path.GetFullPath(client.OutboxDirectory);
+            Directory.CreateDirectory(outboxDir);
+            fullPath = Path.Combine(outboxDir, safeName);
+            await File.WriteAllBytesAsync(fullPath, content).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            var errorResponse = McpErrorResponse.Create(
+                ErrorCodes.UpstreamError,
+                $"Failed to write document {id} to outbox: {ex.Message}",
+                meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(errorResponse);
+        }
+
+        var okResponse = McpResponse<object>.Success(
+            new
+            {
+                id,
+                path = fullPath,
+                filename = safeName,
+                mime_type = contentType,
+                size_bytes = content.Length
+            },
+            new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+        );
+        return JsonSerializer.Serialize(okResponse);
     }
 
     [McpServerTool(Name = "paperless_documents_preview")]

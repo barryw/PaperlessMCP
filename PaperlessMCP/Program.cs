@@ -111,6 +111,11 @@ void ConfigureServices(IServiceCollection services, IConfiguration configuration
         options.HttpTimeoutSeconds = ParsingHelpers.ParsePositiveInt(
             Environment.GetEnvironmentVariable("HTTP_TIMEOUT_SECONDS"),
             configuration.GetValue<int?>("Paperless:HttpTimeoutSeconds") ?? 30);
+
+        options.OutboxDirectory = Environment.GetEnvironmentVariable("PAPERLESS_OUTBOX_DIR")
+                                  ?? Environment.GetEnvironmentVariable("OUTBOX_DIR")
+                                  ?? configuration.GetValue<string>("Paperless:OutboxDirectory")
+                                  ?? PaperlessOptions.DefaultOutboxDirectory;
     });
 
     // Configure retry policy for transient errors
