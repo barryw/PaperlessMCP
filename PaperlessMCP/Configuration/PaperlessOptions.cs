@@ -8,6 +8,11 @@ public class PaperlessOptions
     public const int DefaultMaxPageSize = 100;
 
     /// <summary>
+    /// Default directory that <c>paperless_documents_export_to_outbox</c> writes to.
+    /// </summary>
+    public const string DefaultOutboxDirectory = "/home/mcp/outbox";
+
+    /// <summary>
     /// Base URL of the Paperless-ngx instance (e.g., https://docs.example.com).
     /// </summary>
     public string BaseUrl { get; set; } = string.Empty;
@@ -27,4 +32,11 @@ public class PaperlessOptions
     /// Large full-text searches over big libraries can exceed the default.
     /// </summary>
     public int HttpTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Filesystem directory that <c>paperless_documents_export_to_outbox</c> writes exported
+    /// files into. Intended to be a directory shared (bind-mounted) with other MCP servers so
+    /// they can attach the file by path without the bytes passing through the model context.
+    /// </summary>
+    public string OutboxDirectory { get; set; } = DefaultOutboxDirectory;
 }

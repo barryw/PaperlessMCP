@@ -41,6 +41,11 @@ public class PaperlessClient
     public string BaseUrl => _options.BaseUrl;
 
     /// <summary>
+    /// Directory that <c>paperless_documents_export_to_outbox</c> writes exported files to.
+    /// </summary>
+    public string OutboxDirectory => _options.OutboxDirectory;
+
+    /// <summary>
     /// Normalizes a requested page size to the configured positive upper bound.
     /// </summary>
     public int GetEffectivePageSize(int? requestedPageSize = null)
@@ -436,6 +441,48 @@ public class PaperlessClient
             PreviewUrl = $"{baseUrl}/api/documents/{id}/preview/",
             ThumbnailUrl = $"{baseUrl}/api/documents/{id}/thumb/"
         };
+    }
+
+    /// <summary>
+    /// Downloads a document's binary file server-side. Returns the raw bytes together with
+    /// the response content type and a suggested filename parsed from Content-Disposition,
+    /// so callers can persist or forward the file without the bytes crossing the model context.
+    /// </summary>
+    /// <param name="id">Document ID.</param>
+    /// <param name="original">
+    /// When true, request the original uploaded file; otherwise the archived version
+    /// (typically an OCR'd PDF) is returned when one exists.
+    /// </param>
+    public async Task<(byte[]? Content, string? ContentType, string? SuggestedFileName, string? Error)> DownloadDocumentFileAsync(
+        int id,
+        bool original = false,
+        CancellationToken cancellationToken = default)
+    {
+        var url = $"api/documents/{id}/download/{(original ? "?original=true" : string.Empty)}";
+        try
+        {
+            using var response = await _httpClient
+                .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return (null, null, null, $"HTTP {(int)response.StatusCode} downloading document {id}");
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            var suggestedName = response.Content.Headers.ContentDisposition?.FileNameStar
+                                ?? response.Content.Headers.ContentDisposition?.FileName;
+            suggestedName = suggestedName?.Trim('"');
+
+            return (bytes, contentType, suggestedName, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to download file for document {DocumentId}", id);
+            return (null, null, null, ex.Message);
+        }
     }
 
     /// <summary>
