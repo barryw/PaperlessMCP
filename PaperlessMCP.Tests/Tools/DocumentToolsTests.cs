@@ -1107,5 +1107,125 @@ public class DocumentToolsTests : IDisposable
         json.RootElement.GetProperty("warnings").GetArrayLength().Should().Be(0);
     }
 
+
+    // --- Long-dotfile regression: Path.GetFileNameWithoutExtension(".<128 chars>") is
+    // empty, so the effective-title guard used to see an empty title and let the upload
+    // through, while Paperless kept the whole dotfile name as the stem and truncated it
+    // to 127. Both upload paths must reject it. ---
+
+    [Fact]
+    public async Task Upload_WithNullTitleAndOverlongDotfileName_ReturnsValidationError()
+    {
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        var upload = _factory.MockHandler
+            .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+            .Respond("application/json", "\"task-uuid-12345\"");
+        var fileName = "." + TitleOfLength(TitleLimit + 1);
+
+        // Act
+        var result = await DocumentTools.Upload(_factory.Client, fileContent, fileName);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+        _factory.MockHandler.GetMatchCount(upload).Should().Be(0, "nothing may reach Paperless when the derived title is rejected");
+    }
+
+    [Fact]
+    public async Task Upload_WithNullTitleAndOverlongNameEndingInDot_ReturnsValidationError()
+    {
+        // 127 characters plus a trailing dot: .NET reports a safe 127-character stem,
+        // but pathlib keeps the dot and Paperless stores 128 -> silent truncation.
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        var upload = _factory.MockHandler
+            .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+            .Respond("application/json", "\"task-uuid-12345\"");
+        var fileName = TitleOfLength(TitleLimit) + ".";
+
+        // Act
+        var result = await DocumentTools.Upload(_factory.Client, fileContent, fileName);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+        _factory.MockHandler.GetMatchCount(upload).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Upload_WithNullTitleAndShortDotfileName_Succeeds()
+    {
+        // The guard must not overreach: an ordinary dotfile is a perfectly good title.
+        // Arrange
+        var fileContent = Convert.ToBase64String("Test file content"u8.ToArray());
+        _factory.MockHandler
+            .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+            .Respond("application/json", "\"task-uuid-12345\"");
+
+        // Act
+        var result = await DocumentTools.Upload(_factory.Client, fileContent, ".bashrc");
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+        json.RootElement.GetProperty("warnings").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task UploadFromPath_WithNullTitleAndOverlongDotfileName_ReturnsValidationError()
+    {
+        // Arrange
+        var longDotfile = "." + TitleOfLength(TitleLimit + 1);
+        var tempFile = Path.Combine(Path.GetTempPath(), longDotfile);
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, "Test file content for upload");
+            var upload = _factory.MockHandler
+                .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+                .Respond("application/json", "\"task-uuid-12345\"");
+
+            // Act
+            var result = await DocumentTools.UploadFromPath(_factory.Client, tempFile);
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+            json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+            _factory.MockHandler.GetMatchCount(upload).Should().Be(0, "nothing may reach Paperless when the derived title is rejected");
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task UploadFromPath_WithNullTitleAndShortDotfileName_Succeeds()
+    {
+        // Arrange
+        var tempFile = Path.Combine(Path.GetTempPath(), ".paperlessmcp-dotfile-probe");
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, "Test file content for upload");
+            _factory.MockHandler
+                .When(HttpMethod.Post, "https://paperless.example.com/api/documents/post_document/")
+                .Respond("application/json", "\"task-uuid-12345\"");
+
+            // Act
+            var result = await DocumentTools.UploadFromPath(_factory.Client, tempFile);
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
     #endregion
 }

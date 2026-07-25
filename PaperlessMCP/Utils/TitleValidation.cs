@@ -100,4 +100,58 @@ public static class TitleValidation
             "file name. Shorten the title to " + MaxTitleLength + " characters or fewer and retry.";
         return false;
     }
+
+    /// <summary>
+    /// Derives the title Paperless-ngx would store for an upload that carries no explicit
+    /// title, by applying Python's <c>pathlib</c> stem semantics to the uploaded file name.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The consumer does <c>title = Path(filename).stem</c> and then <c>title[:127]</c>
+    /// (<c>src/documents/consumer.py</c>), so the fallback title is whatever <c>pathlib</c>
+    /// calls the stem — which is <b>not</b> what
+    /// <see cref="Path.GetFileNameWithoutExtension(string)"/> returns.
+    /// </para>
+    /// <para>
+    /// Python only treats the last <c>'.'</c> as an extension separator when it is neither
+    /// the first nor the last character of the name. Two cases diverge from .NET, and both
+    /// hide over-long titles from validation:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <b>Dotfiles.</b> <c>Path(".bashrc").stem</c> is <c>".bashrc"</c>, but
+    /// <c>Path.GetFileNameWithoutExtension(".bashrc")</c> is the empty string. A 200-character
+    /// dotfile uploaded without a title would look like an empty (valid) title here and be
+    /// truncated to 127 server-side.
+    /// </description></item>
+    /// <item><description>
+    /// <b>Trailing dot.</b> <c>Path("report.").stem</c> is <c>"report."</c>, while .NET drops
+    /// the dot and returns <c>"report"</c> — one character short, enough to let a name of
+    /// exactly 128 characters slip through.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// Directory separators are split on <c>'/'</c> only, matching <c>PurePosixPath</c>:
+    /// Paperless-ngx runs on Linux, so a backslash inside an uploaded file name is an
+    /// ordinary character there regardless of the host running this server.
+    /// </para>
+    /// </remarks>
+    /// <param name="fileName">The file name as it will be sent to Paperless-ngx.</param>
+    /// <returns>The stem Paperless would use as the title; empty when there is no name.</returns>
+    public static string GetFallbackTitle(string? fileName)
+    {
+        if (string.IsNullOrEmpty(fileName))
+        {
+            return string.Empty;
+        }
+
+        // Path("a/b/").name == "b": pathlib ignores trailing separators.
+        var trimmed = fileName.TrimEnd('/');
+        var lastSlash = trimmed.LastIndexOf('/');
+        var name = lastSlash >= 0 ? trimmed[(lastSlash + 1)..] : trimmed;
+
+        // pathlib: suffix exists only when 0 < index < len(name) - 1.
+        var lastDot = name.LastIndexOf('.');
+        return lastDot > 0 && lastDot < name.Length - 1 ? name[..lastDot] : name;
+    }
 }

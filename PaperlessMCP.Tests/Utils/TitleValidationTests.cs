@@ -120,4 +120,80 @@ public class TitleValidationTests
         TitleValidation.IsValid(title, out var error).Should().BeTrue();
         error.Should().BeNull();
     }
+
+    // --- Filename fallback: when no title is supplied, Paperless stores
+    // Path(filename).stem, and pathlib does not agree with .NET about what a stem is. ---
+
+    [Theory]
+    [InlineData("report.pdf", "report")]
+    [InlineData("archive.tar.gz", "archive.tar")]
+    [InlineData("no_extension", "no_extension")]
+    [InlineData("scans/2026/report.pdf", "report")]
+    [InlineData("scans/2026/", "2026")]
+    [InlineData("", "")]
+    public void GetFallbackTitle_ForOrdinaryNames_ReturnsTheStem(string fileName, string expected)
+    {
+        TitleValidation.GetFallbackTitle(fileName).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(".bashrc", ".bashrc")]
+    [InlineData(".hidden", ".hidden")]
+    [InlineData("..foo", ".")]
+    [InlineData("report.", "report.")]
+    [InlineData("scans/.bashrc", ".bashrc")]
+    public void GetFallbackTitle_WherePathlibDisagreesWithDotNet_FollowsPathlib(
+        string fileName, string expected)
+    {
+        // Paperless runs Python: a dot is an extension separator only when it is neither
+        // the first nor the last character of the name.
+        TitleValidation.GetFallbackTitle(fileName).Should().Be(expected);
+    }
+
+    [Fact]
+    public void GetFallbackTitle_ForDotfile_DiffersFromGetFileNameWithoutExtension()
+    {
+        // The divergence this helper exists for, pinned so nobody "simplifies" it back.
+        Path.GetFileNameWithoutExtension(".bashrc").Should().BeEmpty(
+            "this is exactly the .NET behaviour that hid over-long dotfile titles");
+        TitleValidation.GetFallbackTitle(".bashrc").Should().Be(".bashrc");
+    }
+
+    [Fact]
+    public void GetFallbackTitle_OfOverlongDotfile_IsRejectedByIsValid()
+    {
+        // A dotfile with no second dot: pathlib keeps the whole name as the stem, so
+        // Paperless would truncate it to 127 without telling anyone.
+        var fileName = "." + TitleOfLength(MaxLength + 1);
+
+        var fallback = TitleValidation.GetFallbackTitle(fileName);
+
+        fallback.Should().Be(fileName, "a dotfile with no other dot has no suffix");
+        TitleValidation.IsValid(fallback, out var error).Should().BeFalse();
+        error.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void GetFallbackTitle_OfNameEndingInDot_KeepsTheDot_AndCrossesTheLimit()
+    {
+        // 127 characters plus a trailing dot: .NET drops the dot and reports a valid
+        // 127-character stem, but pathlib keeps it and Paperless stores 128 -> truncated.
+        var fileName = TitleOfLength(MaxLength) + ".";
+
+        Path.GetFileNameWithoutExtension(fileName).Should().HaveLength(MaxLength,
+            "precondition: .NET would consider this name safe");
+
+        var fallback = TitleValidation.GetFallbackTitle(fileName);
+
+        fallback.Should().HaveLength(MaxLength + 1);
+        TitleValidation.IsValid(fallback, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void GetFallbackTitle_WithNull_ReturnsEmpty()
+    {
+        TitleValidation.GetFallbackTitle(null).Should().BeEmpty();
+    }
+
+    private const int MaxLength = TitleValidation.MaxTitleLength;
 }

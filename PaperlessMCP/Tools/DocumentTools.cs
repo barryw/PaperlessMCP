@@ -222,9 +222,12 @@ public static class DocumentTools
         // on this path and still reports success. Validate the *effective* title: when
         // title is null or empty, PaperlessClient omits it from the request and Paperless
         // derives the title from the uploaded file's stem, which is truncated just the
-        // same. See TitleValidation.
+        // same. The stem must be computed with pathlib semantics, not
+        // Path.GetFileNameWithoutExtension — see TitleValidation.GetFallbackTitle.
+        // fileName is what PaperlessClient puts in the multipart part, so Paperless sees
+        // exactly this string.
         var effectiveTitle = string.IsNullOrEmpty(title)
-            ? Path.GetFileNameWithoutExtension(fileName)
+            ? TitleValidation.GetFallbackTitle(fileName)
             : title;
         if (!TitleValidation.IsValid(effectiveTitle, out var titleError))
         {
@@ -326,8 +329,11 @@ public static class DocumentTools
         // empty title would be omitted from the request and Paperless would fall back to
         // the stem server-side anyway) we derive one from the file name, and that derived
         // title is just as vulnerable to silent truncation.
+        // PaperlessClient uploads this file as Path.GetFileName(filePath), so that base
+        // name is what Paperless applies its own stem rules to; strip the directory the
+        // same way here and let GetFallbackTitle handle the extension pathlib-style.
         var effectiveTitle = string.IsNullOrEmpty(title)
-            ? Path.GetFileNameWithoutExtension(filePath)
+            ? TitleValidation.GetFallbackTitle(Path.GetFileName(filePath))
             : title;
         if (!TitleValidation.IsValid(effectiveTitle, out var titleError))
         {
