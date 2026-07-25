@@ -374,7 +374,9 @@ volumes:
 
 Two things to know before you rely on it:
 
-- **Re-exporting overwrites.** There is no anti-collision suffix; exporting the same document twice replaces the file. Pass `filename` if you need distinct names.
+- **Names carry the document id.** A derived name gets the id inserted before the extension (`invoice.pdf` becomes `invoice_42.pdf`), so two documents whose file has the same name cannot overwrite each other. Re-exporting the same document replaces its own file. A `filename` you pass yourself is used as given, so repeated exports under one name do replace each other.
+- **The archived version is named as such.** With `original=false` (the default) Paperless serves the archived PDF, so the export is named after the archived file rather than after a `.jpg` or `.docx` original. Pass `original=true` to get the uploaded file under its own name.
+- **Exports appear whole.** The download is streamed to a temporary file in the outbox and renamed into place, so a reader on the other side of the volume never picks up a half-written file, and a symlink planted at the destination is replaced rather than written through.
 - **The directory must be writable by the container user.** The image runs as root unless you override it, so exports land in a bind mount owned by root — if the consuming container runs as a non-root user, set `PAPERLESS_OUTBOX_DIR` to a directory both can write, or fix the ownership yourself. The directory is created on first export, and a failure surfaces there rather than at startup.
 
 ### LocalAI Compatibility
