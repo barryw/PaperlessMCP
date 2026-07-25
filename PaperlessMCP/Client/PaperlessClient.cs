@@ -444,44 +444,52 @@ public class PaperlessClient
     }
 
     /// <summary>
-    /// Downloads a document's binary file server-side. Returns the raw bytes together with
-    /// the response content type and a suggested filename parsed from Content-Disposition,
-    /// so callers can persist or forward the file without the bytes crossing the model context.
+    /// Opens a document's binary file server-side for streaming, together with the response
+    /// content type and the file name Paperless reports, so callers can persist or forward the
+    /// file without the bytes crossing the model context.
     /// </summary>
+    /// <remarks>
+    /// The body is deliberately left unread: the caller decides whether to stream it to disk or
+    /// to take a bounded prefix, so a large document never has to be buffered whole. The returned
+    /// <see cref="DocumentFileResponse"/> owns the response and must be disposed.
+    /// </remarks>
     /// <param name="id">Document ID.</param>
     /// <param name="original">
     /// When true, request the original uploaded file; otherwise the archived version
     /// (typically an OCR'd PDF) is returned when one exists.
     /// </param>
-    public async Task<(byte[]? Content, string? ContentType, string? SuggestedFileName, string? Error)> DownloadDocumentFileAsync(
+    public async Task<(DocumentFileResponse? File, string? Error)> OpenDocumentFileAsync(
         int id,
         bool original = false,
         CancellationToken cancellationToken = default)
     {
         var url = $"api/documents/{id}/download/{(original ? "?original=true" : string.Empty)}";
+        HttpResponseMessage? response = null;
         try
         {
-            using var response = await _httpClient
+            response = await _httpClient
                 .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
-                return (null, null, null, $"HTTP {(int)response.StatusCode} downloading document {id}");
+                var status = (int)response.StatusCode;
+                response.Dispose();
+                return (null, $"HTTP {status} downloading document {id}");
             }
 
-            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-            var contentType = response.Content.Headers.ContentType?.MediaType;
-            var suggestedName = response.Content.Headers.ContentDisposition?.FileNameStar
-                                ?? response.Content.Headers.ContentDisposition?.FileName;
-            suggestedName = suggestedName?.Trim('"');
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
-            return (bytes, contentType, suggestedName, null);
+            // The stall timeout mirrors HttpClient.Timeout, which stops applying once the
+            // response headers are in: without it a stalled body read would pin this request
+            // for as long as the connection stays open.
+            return (new DocumentFileResponse(response, stream, _httpClient.Timeout), null);
         }
         catch (Exception ex)
         {
+            response?.Dispose();
             _logger.LogError(ex, "Failed to download file for document {DocumentId}", id);
-            return (null, null, null, ex.Message);
+            return (null, ex.Message);
         }
     }
 

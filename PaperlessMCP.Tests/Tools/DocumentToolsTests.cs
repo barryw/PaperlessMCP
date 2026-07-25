@@ -392,17 +392,41 @@ public class DocumentToolsTests : IDisposable
     private static readonly byte[] FakePdfBytes = "%PDF-1.4 fake body"u8.ToArray();
 
     private void SetupDownloadBytes(int id, byte[] bytes, string mediaType = "application/pdf")
+        => SetupDownloadResponse($"{_factory.Options.BaseUrl}/api/documents/{id}/download/", bytes, mediaType);
+
+    private void SetupDownloadResponse(
+        string url,
+        byte[] bytes,
+        string mediaType = "application/pdf",
+        string? dispositionFileName = null,
+        bool sendContentLength = true)
     {
         _factory.MockHandler
-            .When(HttpMethod.Get, $"{_factory.Options.BaseUrl}/api/documents/{id}/download/")
-            .Respond(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            .When(HttpMethod.Get, url)
+            .Respond(_ =>
             {
-                Content = new ByteArrayContent(bytes)
+                var content = new ByteArrayContent(bytes);
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mediaType);
+                if (dispositionFileName != null)
                 {
-                    Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mediaType) }
+                    content.Headers.ContentDisposition =
+                        new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment")
+                        {
+                            FileName = dispositionFileName
+                        };
                 }
+
+                if (!sendContentLength)
+                {
+                    content.Headers.ContentLength = null;
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
             });
     }
+
+    private static string NewOutboxDir() =>
+        Path.Combine(Path.GetTempPath(), "pmcp-outbox-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
     public async Task ExportToOutbox_WhenDocumentExists_WritesFileAndReturnsPath()
@@ -422,7 +446,10 @@ public class DocumentToolsTests : IDisposable
             var json = JsonDocument.Parse(result);
             json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
             var res = json.RootElement.GetProperty("result");
-            res.GetProperty("filename").GetString().Should().Be("test_document.pdf");
+            // original=false serves the archived PDF, so the export is named after the
+            // archived file, plus the document id so two documents whose file has the same
+            // name cannot overwrite each other.
+            res.GetProperty("filename").GetString().Should().Be("test_document_archived_1.pdf");
             res.GetProperty("mime_type").GetString().Should().Be("application/pdf");
             res.GetProperty("size_bytes").GetInt32().Should().Be(FakePdfBytes.Length);
 
@@ -480,6 +507,274 @@ public class DocumentToolsTests : IDisposable
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task ExportToOutbox_WhenArchivedFileIsServed_DoesNotNameItAfterTheOriginal()
+    {
+        // Arrange: a scan with no archived file name of its own. original=false still serves the
+        // archived PDF, so naming the export page.jpg would hand the next tool a file whose
+        // extension lies about its content.
+        var tempDir = NewOutboxDir();
+        _factory.Options.OutboxDirectory = tempDir;
+        var document = TestFixtures.Documents.CreateDocument(1, "Scan") with
+        {
+            OriginalFileName = "page.jpg",
+            ArchivedFileName = null
+        };
+        _factory.SetupGet("api/documents/1/", JsonSerializer.Serialize(document));
+        SetupDownloadBytes(1, FakePdfBytes);
+
+        try
+        {
+            // Act
+            var result = await DocumentTools.ExportToOutbox(_factory.Client, 1);
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+            json.RootElement.GetProperty("result").GetProperty("filename").GetString()
+                .Should().Be("page_1.pdf");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExportToOutbox_WhenOriginalRequested_KeepsTheOriginalExtension()
+    {
+        // Arrange
+        var tempDir = NewOutboxDir();
+        _factory.Options.OutboxDirectory = tempDir;
+        var document = TestFixtures.Documents.CreateDocument(1, "Scan") with
+        {
+            OriginalFileName = "page.jpg",
+            ArchivedFileName = null
+        };
+        _factory.SetupGet("api/documents/1/", JsonSerializer.Serialize(document));
+        SetupDownloadResponse(
+            $"{_factory.Options.BaseUrl}/api/documents/1/download/?original=true",
+            FakePdfBytes,
+            mediaType: "image/jpeg");
+
+        try
+        {
+            // Act
+            var result = await DocumentTools.ExportToOutbox(_factory.Client, 1, original: true);
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+            json.RootElement.GetProperty("result").GetProperty("filename").GetString()
+                .Should().Be("page_1.jpg");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExportToOutbox_PrefersTheFileNameTheServerReports()
+    {
+        // Arrange: Content-Disposition describes the bytes actually being sent, so it outranks
+        // anything stored on the document record.
+        var tempDir = NewOutboxDir();
+        _factory.Options.OutboxDirectory = tempDir;
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadResponse(
+            $"{_factory.Options.BaseUrl}/api/documents/1/download/",
+            FakePdfBytes,
+            dispositionFileName: "scan-2026.pdf");
+
+        try
+        {
+            // Act
+            var result = await DocumentTools.ExportToOutbox(_factory.Client, 1);
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+            json.RootElement.GetProperty("result").GetProperty("filename").GetString()
+                .Should().Be("scan-2026_1.pdf");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExportToOutbox_ForTwoDocumentsWithTheSameFileName_KeepsBothFiles()
+    {
+        // Arrange: both documents carry the same file name, which used to mean the second export
+        // silently replaced the first and the first result then pointed at the wrong document.
+        var tempDir = NewOutboxDir();
+        _factory.Options.OutboxDirectory = tempDir;
+        var second = "%PDF-1.4 second body"u8.ToArray();
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "First"));
+        _factory.SetupGet("api/documents/2/", TestFixtures.Documents.CreateDocumentJson(2, "Second"));
+        SetupDownloadBytes(1, FakePdfBytes);
+        SetupDownloadBytes(2, second);
+
+        try
+        {
+            // Act
+            var firstResult = await DocumentTools.ExportToOutbox(_factory.Client, 1);
+            var secondResult = await DocumentTools.ExportToOutbox(_factory.Client, 2);
+
+            // Assert
+            var firstPath = JsonDocument.Parse(firstResult).RootElement
+                .GetProperty("result").GetProperty("path").GetString()!;
+            var secondPath = JsonDocument.Parse(secondResult).RootElement
+                .GetProperty("result").GetProperty("path").GetString()!;
+
+            secondPath.Should().NotBe(firstPath);
+            (await File.ReadAllBytesAsync(firstPath)).Should().Equal(FakePdfBytes,
+                "the first export must survive the second");
+            (await File.ReadAllBytesAsync(secondPath)).Should().Equal(second);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExportToOutbox_WhenDestinationIsASymlink_ReplacesTheLinkInsteadOfWritingThroughIt()
+    {
+        // Arrange: the outbox is a shared volume, so another writer can plant a symlink at the
+        // path we are about to write. Writing through it would let them pick a file for this
+        // process (running as root by default) to truncate.
+        var tempDir = NewOutboxDir();
+        var outsideDir = NewOutboxDir();
+        _factory.Options.OutboxDirectory = tempDir;
+        Directory.CreateDirectory(tempDir);
+        Directory.CreateDirectory(outsideDir);
+        var victim = Path.Combine(outsideDir, "victim.txt");
+        await File.WriteAllTextAsync(victim, "do not touch");
+        var destination = Path.Combine(tempDir, "test_document_archived_1.pdf");
+        File.CreateSymbolicLink(destination, victim);
+
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadBytes(1, FakePdfBytes);
+
+        try
+        {
+            // Act
+            var result = await DocumentTools.ExportToOutbox(_factory.Client, 1);
+
+            // Assert
+            var json = JsonDocument.Parse(result);
+            json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+            (await File.ReadAllTextAsync(victim)).Should().Be("do not touch",
+                "the export must not be written through the symlink");
+            new FileInfo(destination).LinkTarget.Should().BeNull("the link itself must be replaced");
+            (await File.ReadAllBytesAsync(destination)).Should().Equal(FakePdfBytes);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+            if (Directory.Exists(outsideDir)) Directory.Delete(outsideDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExportToOutbox_LeavesNoPartialFileBehind_WhenTheDownloadSucceeds()
+    {
+        // Arrange: the write goes through a temporary file, which must not be left in the outbox
+        // for the other side of the volume to find.
+        var tempDir = NewOutboxDir();
+        _factory.Options.OutboxDirectory = tempDir;
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadBytes(1, FakePdfBytes);
+
+        try
+        {
+            // Act
+            await DocumentTools.ExportToOutbox(_factory.Client, 1);
+
+            // Assert
+            Directory.GetFiles(tempDir).Should().HaveCount(1);
+            Directory.GetFiles(tempDir, "*.part").Should().BeEmpty();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Download_WithReturnBase64_WhenTooLarge_StopsReadingAtTheCap()
+    {
+        // Arrange: a body that throws once read past the cap. Rejecting an over-large file must
+        // not require buffering it first, which is what made this an OOM risk.
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        _factory.MockHandler
+            .When(HttpMethod.Get, $"{_factory.Options.BaseUrl}/api/documents/1/download/")
+            .Respond(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new ThrowPastLimitStream(MaxInlineBase64BytesForTests + 1))
+            });
+
+        // Act
+        var result = await DocumentTools.Download(_factory.Client, 1, returnBase64: true);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION",
+            "one byte past the cap is all it takes to know the file is too large");
+    }
+
+    [Fact]
+    public async Task Download_WithReturnBase64_WhenTheBodyStalls_FailsInsteadOfPinningTheRequest()
+    {
+        // Arrange: HttpClient.Timeout stops applying once the response headers are in, so a body
+        // that goes quiet would hold this request open for as long as the connection lasts.
+        _factory.HttpClient.Timeout = TimeSpan.FromMilliseconds(250);
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        _factory.MockHandler
+            .When(HttpMethod.Get, $"{_factory.Options.BaseUrl}/api/documents/1/download/")
+            .Respond(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new StallingStream())
+            });
+
+        // Act
+        var download = DocumentTools.Download(_factory.Client, 1, returnBase64: true);
+        var finished = await Task.WhenAny(download, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        // Assert
+        finished.Should().BeSameAs(download, "a stalled body read must be abandoned, not awaited forever");
+        var json = JsonDocument.Parse(await download);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("UPSTREAM_ERROR");
+    }
+
+
+    [Fact]
+    public async Task Download_WithReturnBase64_WhenTooLargeAndSizeUnknown_StillReturnsValidationError()
+    {
+        // Arrange: no Content-Length, so the cap cannot be enforced from the header. The read
+        // itself must be bounded instead.
+        var bigBytes = new byte[13 * 1024];
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadResponse(
+            $"{_factory.Options.BaseUrl}/api/documents/1/download/",
+            bigBytes,
+            sendContentLength: false);
+
+        // Act
+        var result = await DocumentTools.Download(_factory.Client, 1, returnBase64: true);
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeFalse();
+        json.RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+    }
+
 
     [Fact]
     public async Task Download_WithReturnBase64_WhenSmall_ReturnsContent()
@@ -1360,4 +1655,68 @@ public class DocumentToolsTests : IDisposable
     }
 
     #endregion
+    /// <summary>Mirrors DocumentTools.MaxInlineBase64Bytes, which is private.</summary>
+    private const int MaxInlineBase64BytesForTests = 12 * 1024;
+
+    private abstract class TestBodyStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    /// <summary>A response body that throws once more than <paramref name="allowed"/> bytes are read.</summary>
+    private sealed class ThrowPastLimitStream(int allowed) : TestBodyStream
+    {
+        private int _served;
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var chunk = Math.Min(buffer.Length, 4096);
+            if (chunk == 0)
+            {
+                return ValueTask.FromResult(0);
+            }
+
+            _served += chunk;
+            if (_served > allowed)
+            {
+                throw new IOException($"body read past {allowed} bytes");
+            }
+
+            buffer.Span[..chunk].Fill(0x25);
+            return ValueTask.FromResult(chunk);
+        }
+    }
+
+    /// <summary>A response body that sends one byte and then goes quiet forever.</summary>
+    private sealed class StallingStream : TestBodyStream
+    {
+        private bool _sentFirstByte;
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (!_sentFirstByte && buffer.Length > 0)
+            {
+                _sentFirstByte = true;
+                buffer.Span[0] = 0x25;
+                return 1;
+            }
+
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            return 0;
+        }
+    }
+
 }
