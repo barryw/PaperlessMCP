@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using PaperlessMCP.Client;
 using PaperlessMCP.Models.Common;
 using PaperlessMCP.Models.Documents;
+using PaperlessMCP.Utils;
 using static PaperlessMCP.Utils.ParsingHelpers;
 
 namespace PaperlessMCP.Tools;
@@ -217,6 +218,27 @@ public static class DocumentTools
         [Description("Archive serial number (optional)")] int? archiveSerialNumber = null,
         [Description("Created date (YYYY-MM-DD, optional)")] string? created = null)
     {
+        // Reject over-long titles before uploading: Paperless truncates them silently
+        // on this path and still reports success. Validate the *effective* title: when
+        // title is null or empty, PaperlessClient omits it from the request and Paperless
+        // derives the title from the uploaded file's stem, which is truncated just the
+        // same. The stem must be computed with pathlib semantics, not
+        // Path.GetFileNameWithoutExtension — see TitleValidation.GetFallbackTitle.
+        // fileName is what PaperlessClient puts in the multipart part, so Paperless sees
+        // exactly this string.
+        var effectiveTitle = string.IsNullOrEmpty(title)
+            ? TitleValidation.GetFallbackTitle(fileName)
+            : title;
+        if (!TitleValidation.IsValid(effectiveTitle, out var titleError))
+        {
+            var errorResponse = McpErrorResponse.Create(
+                ErrorCodes.Validation,
+                titleError!,
+                meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(errorResponse);
+        }
+
         byte[] fileBytes;
         try
         {
@@ -303,10 +325,30 @@ public static class DocumentTools
             return JsonSerializer.Serialize(errorResponse);
         }
 
+        // Validate the *effective* title: when no title is supplied (null or empty — an
+        // empty title would be omitted from the request and Paperless would fall back to
+        // the stem server-side anyway) we derive one from the file name, and that derived
+        // title is just as vulnerable to silent truncation.
+        // PaperlessClient uploads this file as Path.GetFileName(filePath), so that base
+        // name is what Paperless applies its own stem rules to; strip the directory the
+        // same way here and let GetFallbackTitle handle the extension pathlib-style.
+        var effectiveTitle = string.IsNullOrEmpty(title)
+            ? TitleValidation.GetFallbackTitle(Path.GetFileName(filePath))
+            : title;
+        if (!TitleValidation.IsValid(effectiveTitle, out var titleError))
+        {
+            var errorResponse = McpErrorResponse.Create(
+                ErrorCodes.Validation,
+                titleError!,
+                meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(errorResponse);
+        }
+
         var fileInfo = new FileInfo(filePath);
         var metadata = new DocumentUploadRequest
         {
-            Title = title ?? Path.GetFileNameWithoutExtension(filePath),
+            Title = effectiveTitle,
             Correspondent = correspondent,
             DocumentType = documentType,
             StoragePath = storagePath,
@@ -355,6 +397,19 @@ public static class DocumentTools
         [Description("Created date (YYYY-MM-DD, optional)")] string? created = null,
         [Description("Include the document's full OCR content in the response (default: false). Leave false for metadata-only updates to save tokens.")] bool includeContent = false)
     {
+        // Paperless does reject an over-long title on this path (DRF MaxLengthValidator(128)),
+        // but we validate locally anyway: it keeps the contract identical across all three
+        // write paths, applies the stricter 127 that upload needs, and saves a round-trip.
+        if (!TitleValidation.IsValid(title, out var titleError))
+        {
+            var errorResponse = McpErrorResponse.Create(
+                ErrorCodes.Validation,
+                titleError!,
+                meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+            );
+            return JsonSerializer.Serialize(errorResponse);
+        }
+
         var request = new DocumentUpdateRequest
         {
             Title = title,
