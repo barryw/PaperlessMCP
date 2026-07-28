@@ -229,7 +229,7 @@ public static class DocumentTools
     public static async Task<string> ExportToOutbox(
         PaperlessClient client,
         [Description("Document ID")] int id,
-        [Description("Override the output filename (optional; defaults to the document's original filename). Only the base file name is used; any directory part is ignored.")] string? filename = null,
+        [Description("Override the output filename (optional). By default, the served filename is used, falling back to the archived/original document filename, with the document ID inserted for uniqueness. Only the base file name is used; any directory part is ignored.")] string? filename = null,
         [Description("Export the original uploaded file instead of the archived PDF (optional, default false)")] bool original = false)
     {
         var document = await client.GetDocumentAsync(id).ConfigureAwait(false);
