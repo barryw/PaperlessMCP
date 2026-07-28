@@ -21,6 +21,10 @@ services:
       - MCP_PORT=${MCP_PORT:-5000}
       # Optional: Normalize MCP Accept headers for clients that cannot send both required media types
       - MCP_RELAX_ACCEPT_HEADER=${MCP_RELAX_ACCEPT_HEADER:-false}
+      # Optional: Shared directory for exported document files
+      - PAPERLESS_OUTBOX_DIR=${PAPERLESS_OUTBOX_DIR:-/home/mcp/outbox}
+    volumes:
+      - paperless-outbox:${PAPERLESS_OUTBOX_DIR:-/home/mcp/outbox}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/mcp"]
@@ -29,11 +33,16 @@ services:
       retries: 3
       start_period: 10s
 
+volumes:
+  paperless-outbox:
+
 # Example usage:
 #
 # 1. Create a .env file with your configuration:
 #    PAPERLESS_BASE_URL=https://your-paperless-instance.com
 #    PAPERLESS_API_TOKEN=your-api-token-here
+#    # Optional shared export directory (default: /home/mcp/outbox):
+#    # PAPERLESS_OUTBOX_DIR=/home/mcp/outbox
 #    # Optional LocalAI compatibility:
 #    # MCP_RELAX_ACCEPT_HEADER=true
 #

@@ -91,12 +91,15 @@ docker run -d \
   -e PAPERLESS_BASE_URL=https://your-paperless.example.com \
   -e PAPERLESS_API_TOKEN=your-token-here \
   -p 5000:5000 \
+  -v paperless-outbox:/home/mcp/outbox \
   ghcr.io/barryw/paperlessmcp:vX.Y.Z
 ```
 
 > **Grab the version from the badge above.** The release pipeline also publishes `latest`, but pinning a versioned tag gives you a [reproducible deployment](https://vsupalov.com/docker-latest-tag/).
 
 Connect your MCP client to `http://localhost:5000/mcp` and start talking to your documents.
+
+The `paperless-outbox` volume is where `paperless_documents_export_to_outbox` writes exported files. Without it the exports stay inside the container and no other process can reach them — see [Sharing the outbox with another MCP server](#sharing-the-outbox-with-another-mcp-server).
 
 ### Option 2: Claude Desktop
 
@@ -235,7 +238,8 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 | `paperless_documents_update` | Update title, tags, correspondent, etc. |
 | `paperless_documents_delete` | Delete a document (requires confirmation) |
 | `paperless_documents_bulk_update` | Update multiple documents at once |
-| `paperless_documents_download` | Get download URL for original file |
+| `paperless_documents_download` | Get download, preview and thumbnail URLs; optionally inline tiny files as base64 |
+| `paperless_documents_export_to_outbox` | Write a document's file into the shared outbox directory so another tool can attach it by path |
 | `paperless_documents_preview` | Get preview URL |
 | `paperless_documents_thumbnail` | Get thumbnail URL |
 | `paperless_documents_reprocess` | Re-run OCR on a document |
@@ -336,8 +340,44 @@ Environment variables. That's it. No config files to manage.
 | `MCP_RELAX_ACCEPT_HEADER` | | `false` | Normalize `/mcp` POST `Accept` headers for clients that cannot send both Streamable HTTP media types |
 | `MAX_PAGE_SIZE` | | `100` | Upper bound for paginated Paperless-ngx requests made by this server |
 | `HTTP_TIMEOUT_SECONDS` | | `30` | Timeout for requests to Paperless-ngx. Raise it if large full-text searches time out |
+| `PAPERLESS_OUTBOX_DIR` | | `/home/mcp/outbox` | Directory `paperless_documents_export_to_outbox` writes into. Mount it as a shared volume or the exports are unreachable outside the container |
 
-Aliases supported: `PAPERLESS_URL` and `PAPERLESS_TOKEN` also work if that's your style.
+Aliases supported: `PAPERLESS_URL` and `PAPERLESS_TOKEN` also work if that's your style, and `OUTBOX_DIR` is accepted for `PAPERLESS_OUTBOX_DIR`.
+
+### Sharing the outbox with another MCP server
+
+`paperless_documents_export_to_outbox` downloads a document server-side and writes it to `PAPERLESS_OUTBOX_DIR`, returning `{path, filename, mime_type, size_bytes}`. The point is that the bytes never travel through the model's context: another tool (a mail server that attaches files by path, say) reads the file directly.
+
+That only works if both containers see the same directory. Mount one volume into both, and make sure the path the other server is told to read matches the path it sees:
+
+```yaml
+services:
+  paperless-mcp:
+    image: ghcr.io/barryw/paperlessmcp:vX.Y.Z
+    environment:
+      PAPERLESS_BASE_URL: https://your-paperless.example.com
+      PAPERLESS_API_TOKEN: your-token-here
+      PAPERLESS_OUTBOX_DIR: /home/mcp/outbox
+    ports:
+      - "5000:5000"
+    volumes:
+      - outbox:/home/mcp/outbox
+
+  some-other-mcp:
+    image: example/other-mcp:latest
+    volumes:
+      - outbox:/home/mcp/outbox
+
+volumes:
+  outbox:
+```
+
+Two things to know before you rely on it:
+
+- **Names carry the document id.** A derived name gets the id inserted before the extension (`invoice.pdf` becomes `invoice_42.pdf`), so two documents whose file has the same name cannot overwrite each other. Re-exporting the same document replaces its own file. A `filename` you pass yourself is used as given, so repeated exports under one name do replace each other.
+- **The archived version is named as such.** With `original=false` (the default) Paperless serves the archived PDF, so the export is named after the archived file rather than after a `.jpg` or `.docx` original. Pass `original=true` to get the uploaded file under its own name.
+- **Exports appear whole.** The download is streamed to a temporary file in the outbox and renamed into place, so a reader on the other side of the volume never picks up a half-written file, and a symlink planted at the destination is replaced rather than written through.
+- **The directory must be writable by the container user.** The image runs as root unless you override it, so exports land in a bind mount owned by root — if the consuming container runs as a non-root user, set `PAPERLESS_OUTBOX_DIR` to a directory both can write, or fix the ownership yourself. The directory is created on first export, and a failure surfaces there rather than at startup.
 
 ### LocalAI Compatibility
 
