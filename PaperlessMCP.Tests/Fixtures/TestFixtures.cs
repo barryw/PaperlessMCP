@@ -227,8 +227,8 @@ public static class TestFixtures
                 .ToList()
         };
 
-        public static string CreateCustomFieldJson(int id = 1, string name = "Test Field") =>
-            JsonSerializer.Serialize(CreateCustomField(id, name));
+        public static string CreateCustomFieldJson(int id = 1, string name = "Test Field", string dataType = "string") =>
+            JsonSerializer.Serialize(CreateCustomField(id, name, dataType));
 
         public static string CreateCustomFieldListJson(int count = 3) =>
             JsonSerializer.Serialize(CreateCustomFieldList(count));

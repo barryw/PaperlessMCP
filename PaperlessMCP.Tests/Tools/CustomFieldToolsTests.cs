@@ -328,6 +328,51 @@ public class CustomFieldToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task Assign_DocumentLinkField_SendsIdArray()
+    {
+        // Arrange
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        _factory.SetupGet("api/custom_fields/1/", TestFixtures.CustomFields.CreateCustomFieldJson(1, "Related Documents", "documentlink"));
+        _factory.MockHandler
+            .When(HttpMethod.Patch, "https://paperless.example.com/api/documents/1/")
+            .WithJsonContent<JsonElement>(json =>
+                json.GetProperty("custom_fields")[0].GetProperty("value").EnumerateArray()
+                    .Select(v => v.GetInt32()).SequenceEqual([3, 7, 12]))
+            .Respond("application/json", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+
+        // Act
+        var result = await CustomFieldTools.Assign(_factory.Client, documentId: 1, fieldId: 1, value: "3, 7, 12");
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue("because response was {0}", result);
+        json.RootElement.GetProperty("result").GetProperty("value").EnumerateArray()
+            .Select(v => v.GetInt32()).Should().Equal(3, 7, 12);
+    }
+
+    [Fact]
+    public async Task Assign_DocumentLinkField_WithInvalidId_OmitsValue()
+    {
+        // Arrange: an unparsable ID yields a null value, and the client's serializer
+        // (DefaultIgnoreCondition = WhenWritingNull) omits null properties entirely.
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        _factory.SetupGet("api/custom_fields/1/", TestFixtures.CustomFields.CreateCustomFieldJson(1, "Related Documents", "documentlink"));
+        _factory.MockHandler
+            .When(HttpMethod.Patch, "https://paperless.example.com/api/documents/1/")
+            .WithJsonContent<JsonElement>(json =>
+                !json.GetProperty("custom_fields")[0].TryGetProperty("value", out _))
+            .Respond("application/json", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+
+        // Act
+        var result = await CustomFieldTools.Assign(_factory.Client, documentId: 1, fieldId: 1, value: "3, abc");
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue("because response was {0}", result);
+        json.RootElement.GetProperty("result").GetProperty("value").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task Assign_WhenFieldNotFound_ReturnsError()
     {
         // Arrange
