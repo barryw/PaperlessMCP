@@ -542,6 +542,6 @@ Assign a custom field value to a document.
 |-----------|------|----------|-------------|
 | `documentId` | int | Yes | Document ID |
 | `fieldId` | int | Yes | Custom field ID |
-| `value` | string | Yes | Value to assign (type depends on field) |
+| `value` | string | Yes | Value to assign (type depends on field; for `documentlink`, a comma-separated list of document IDs, e.g. `3,7,12`) |
 
 **Returns:** Assignment status and assigned value

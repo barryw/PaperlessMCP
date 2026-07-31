@@ -232,7 +232,7 @@ public static class CustomFieldTools
         PaperlessClient client,
         [Description("Document ID")] int documentId,
         [Description("Custom field ID")] int fieldId,
-        [Description("Value to assign (string, number, boolean, or date depending on field type)")] string value)
+        [Description("Value to assign (string, number, boolean, or date depending on field type; comma-separated document IDs for 'documentlink')")] string value)
     {
         // Get current document to update its custom fields
         var document = await client.GetDocumentAsync(documentId).ConfigureAwait(false);
@@ -267,6 +267,7 @@ public static class CustomFieldTools
             CustomFieldDataType.Integer => int.TryParse(value, out var i) ? i : null,
             CustomFieldDataType.Float => double.TryParse(value, out var d) ? d : null,
             CustomFieldDataType.Date => value, // Keep as string for dates
+            CustomFieldDataType.DocumentLink => ParseDocumentLinkIds(value),
             _ => value
         };
 
@@ -313,6 +314,34 @@ public static class CustomFieldTools
             new McpMeta { PaperlessBaseUrl = client.BaseUrl }
         );
         return JsonSerializer.Serialize(response);
+    }
+
+    /// <summary>
+    /// Paperless-ngx expects a documentlink field's value to be a JSON array of
+    /// linked document IDs, not a plain string. Parses a comma-separated list of
+    /// IDs into that shape; returns null if any entry fails to parse as an int.
+    /// </summary>
+    private static List<int>? ParseDocumentLinkIds(string value)
+    {
+        var parts = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (parts.Length == 0)
+        {
+            return null;
+        }
+
+        var ids = new List<int>(parts.Length);
+        foreach (var part in parts)
+        {
+            if (!int.TryParse(part, out var id))
+            {
+                return null;
+            }
+
+            ids.Add(id);
+        }
+
+        return ids;
     }
 
     private static List<SelectOption> BuildSelectOptions(
