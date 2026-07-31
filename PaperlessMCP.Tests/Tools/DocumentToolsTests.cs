@@ -85,6 +85,27 @@ public class DocumentToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task Search_WithCustomFieldQuery_ForwardsQueryToPaperless()
+    {
+        // Arrange
+        _factory.MockHandler
+            .When(HttpMethod.Get, "https://paperless.example.com/api/documents/*")
+            .With(request => System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query)["custom_field_query"]
+                == """["Invoice Number","icontains","INV-2024"]""")
+            .Respond("application/json", TestFixtures.Documents.CreateSearchResultsJson(3));
+
+        // Act
+        var result = await DocumentTools.Search(
+            _factory.Client,
+            customFieldQuery: """["Invoice Number","icontains","INV-2024"]""");
+
+        // Assert
+        var json = JsonDocument.Parse(result);
+        json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue("because response was {0}", result);
+        json.RootElement.GetProperty("result").GetArrayLength().Should().Be(3);
+    }
+
+    [Fact]
     public async Task Search_WithCorrespondentAndNoteUserObject_ReturnsDocuments()
     {
         // Arrange

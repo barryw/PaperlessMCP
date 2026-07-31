@@ -1,4 +1,5 @@
 using System.Net;
+using System.Web;
 using FluentAssertions;
 using PaperlessMCP.Client;
 using PaperlessMCP.Models.Correspondents;
@@ -97,6 +98,40 @@ public class PaperlessClientTests : IDisposable
 
         // Assert
         result.Should().NotBeNull();
+        result.Count.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task SearchDocumentsAsync_WithCustomFieldQuery_SendsCustomFieldQueryParam()
+    {
+        // Arrange
+        _factory.MockHandler
+            .When(HttpMethod.Get, "https://paperless.example.com/api/documents/*")
+            .With(request => HttpUtility.ParseQueryString(request.RequestUri!.Query)["custom_field_query"]
+                == """["Invoice Number","icontains","INV-2024"]""")
+            .Respond("application/json", TestFixtures.Documents.CreateSearchResultsJson(1));
+
+        // Act
+        var result = await _factory.Client.SearchDocumentsAsync(
+            customFieldQuery: """["Invoice Number","icontains","INV-2024"]""");
+
+        // Assert: an unmatched query string 404s, which surfaces as an empty result
+        result.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SearchDocumentsAsync_WithoutCustomFieldQuery_OmitsCustomFieldQueryParam()
+    {
+        // Arrange
+        _factory.MockHandler
+            .When(HttpMethod.Get, "https://paperless.example.com/api/documents/*")
+            .With(request => !request.RequestUri!.Query.Contains("custom_field_query"))
+            .Respond("application/json", TestFixtures.Documents.CreateSearchResultsJson(2));
+
+        // Act
+        var result = await _factory.Client.SearchDocumentsAsync(query: "test");
+
+        // Assert
         result.Count.Should().Be(2);
     }
 

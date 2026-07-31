@@ -33,6 +33,7 @@ public static class DocumentTools
         [Description("Page number (default: 1)")] int page = 1,
         [Description("Page size (default: 25, capped by MAX_PAGE_SIZE)")] int pageSize = 25,
         [Description("Ordering field (e.g., 'created', '-created', 'title')")] string? ordering = null,
+        [Description("Filter by custom field values using the Paperless-ngx custom field query grammar: a JSON expression of the form [\"field name\", \"operator\", value] (e.g. [\"Invoice Number\", \"icontains\", \"INV-2024\"]) or a logical group [\"AND\"|\"OR\"|\"NOT\", [expr, ...]]. Operators include exact, in, isnull, exists, contains, icontains, istartswith, iendswith, gt, gte, lt, lte, range.")] string? customFieldQuery = null,
         [Description("Include document content in results (default: false). Use paperless_documents_get for full content.")] bool includeContent = false,
         [Description("Max content length per document when includeContent=true (default: 500). Use 0 for unlimited.")] int contentMaxLength = 500)
     {
@@ -59,7 +60,8 @@ public static class DocumentTools
             archiveSerialNumber: archiveSerialNumber,
             page: page,
             pageSize: effectivePageSize,
-            ordering: ordering
+            ordering: ordering,
+            customFieldQuery: customFieldQuery
         ).ConfigureAwait(false);
 
         if (!searchResult.IsSuccess)
