@@ -49,6 +49,7 @@ Search for documents with full-text search and filters.
 | `page` | int | No | 1 | Page number |
 | `pageSize` | int | No | 25 | Results per page (max: 100) |
 | `ordering` | string | No | - | Sort field (e.g., 'created', '-created', 'title') |
+| `customFieldQuery` | string | No | - | Filter by custom field values, e.g. `["Invoice Number", "icontains", "INV-2024"]` ([grammar](https://docs.paperless-ngx.com/api/#searching-with-custom-fields)) |
 | `includeContent` | bool | No | false | Include document content in results |
 | `contentMaxLength` | int | No | 500 | Max content length when `includeContent=true` |
 

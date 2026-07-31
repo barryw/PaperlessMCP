@@ -135,6 +135,7 @@ public class PaperlessClient
         int page = 1,
         int? pageSize = null,
         string? ordering = null,
+        string? customFieldQuery = null,
         CancellationToken cancellationToken = default)
     {
         var result = await SearchDocumentsWithResultAsync(
@@ -152,6 +153,7 @@ public class PaperlessClient
             page,
             pageSize,
             ordering,
+            customFieldQuery,
             cancellationToken).ConfigureAwait(false);
 
         return result.IsSuccess && result.Value != null
@@ -174,6 +176,7 @@ public class PaperlessClient
         int page = 1,
         int? pageSize = null,
         string? ordering = null,
+        string? customFieldQuery = null,
         CancellationToken cancellationToken = default)
     {
         var queryParams = HttpUtility.ParseQueryString(string.Empty);
@@ -212,6 +215,10 @@ public class PaperlessClient
 
         if (archiveSerialNumber.HasValue)
             queryParams["archive_serial_number"] = archiveSerialNumber.Value.ToString();
+
+        // Paperless-ngx owns the custom_field_query grammar and validates it, so pass it through verbatim.
+        if (!string.IsNullOrWhiteSpace(customFieldQuery))
+            queryParams["custom_field_query"] = customFieldQuery;
 
         queryParams["page"] = page.ToString();
         queryParams["page_size"] = GetEffectivePageSize(pageSize).ToString();
