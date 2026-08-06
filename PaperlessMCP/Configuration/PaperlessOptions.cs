@@ -8,6 +8,17 @@ public class PaperlessOptions
     public const int DefaultMaxPageSize = 100;
 
     /// <summary>
+    /// Paperless-ngx REST API version requested via the <c>Accept</c> header.
+    /// Paperless-ngx 3.x supports versions 9 and 10; 10 is the current default.
+    /// </summary>
+    public const string ApiVersion = "10";
+
+    /// <summary>
+    /// Full <c>Accept</c> header value for Paperless-ngx API requests.
+    /// </summary>
+    public const string ApiAcceptHeader = $"application/json; version={ApiVersion}";
+
+    /// <summary>
     /// Default directory that <c>paperless_documents_export_to_outbox</c> writes to.
     /// </summary>
     public const string DefaultOutboxDirectory = "/home/mcp/outbox";

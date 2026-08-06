@@ -27,7 +27,7 @@ public class MockHttpClientFactory : IDisposable
         MockHandler = new MockHttpMessageHandler();
         HttpClient = MockHandler.ToHttpClient();
         HttpClient.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-        HttpClient.DefaultRequestHeaders.Add("Accept", "application/json; version=9");
+        HttpClient.DefaultRequestHeaders.Add("Accept", PaperlessOptions.ApiAcceptHeader);
 
         var optionsMock = Substitute.For<IOptions<PaperlessOptions>>();
         optionsMock.Value.Returns(Options);
