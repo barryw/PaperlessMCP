@@ -317,6 +317,19 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 </details>
 
 <details>
+<summary><strong>Workflows</strong> — automation rules</summary>
+
+| Tool | What it does |
+|------|--------------|
+| `paperless_workflows_list` | List all workflows with triggers and actions |
+| `paperless_workflows_get` | Get a workflow by ID |
+| `paperless_workflows_create` | Create a workflow from JSON triggers and actions |
+| `paperless_workflows_update` | Update name, order, enabled state, triggers or actions |
+| `paperless_workflows_delete` | Delete a workflow |
+
+</details>
+
+<details>
 <summary><strong>Health</strong> — is it alive?</summary>
 
 | Tool | What it does |

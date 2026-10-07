@@ -11,6 +11,7 @@ using PaperlessMCP.Models.CustomFields;
 using PaperlessMCP.Models.Documents;
 using PaperlessMCP.Models.DocumentTypes;
 using PaperlessMCP.Models.StoragePaths;
+using PaperlessMCP.Models.Workflows;
 using PaperlessMCP.Models.Tags;
 
 namespace PaperlessMCP.Client;
@@ -714,6 +715,42 @@ public class PaperlessClient
     public async Task<bool> DeleteStoragePathAsync(int id, CancellationToken cancellationToken = default)
     {
         return await DeleteAsync($"api/storage_paths/{id}/", cancellationToken).ConfigureAwait(false);
+    }
+
+    #endregion
+
+    #region Workflows
+
+    public async Task<PaginatedResult<Workflow>> GetWorkflowsAsync(int page = 1, int? pageSize = null, string? ordering = null, CancellationToken cancellationToken = default)
+    {
+        var queryParams = HttpUtility.ParseQueryString(string.Empty);
+        queryParams["page"] = page.ToString();
+        queryParams["page_size"] = GetEffectivePageSize(pageSize).ToString();
+        if (!string.IsNullOrEmpty(ordering))
+            queryParams["ordering"] = ordering;
+
+        return await GetAsync<PaginatedResult<Workflow>>($"api/workflows/?{queryParams}", cancellationToken).ConfigureAwait(false)
+               ?? new PaginatedResult<Workflow>();
+    }
+
+    public async Task<Workflow?> GetWorkflowAsync(int id, CancellationToken cancellationToken = default)
+    {
+        return await GetAsync<Workflow>($"api/workflows/{id}/", cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ApiResult<Workflow>> CreateWorkflowWithResultAsync(WorkflowCreateRequest request, CancellationToken cancellationToken = default)
+    {
+        return await PostWithResultAsync<Workflow>("api/workflows/", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ApiResult<Workflow>> UpdateWorkflowWithResultAsync(int id, WorkflowUpdateRequest request, CancellationToken cancellationToken = default)
+    {
+        return await PatchWithResultAsync<Workflow>($"api/workflows/{id}/", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> DeleteWorkflowAsync(int id, CancellationToken cancellationToken = default)
+    {
+        return await DeleteAsync($"api/workflows/{id}/", cancellationToken).ConfigureAwait(false);
     }
 
     #endregion
