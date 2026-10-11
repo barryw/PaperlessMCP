@@ -14,7 +14,15 @@ var useStdio = args.Contains("--stdio");
 if (useStdio)
 {
     // stdio transport for local usage (Claude Desktop)
-    var builder = Host.CreateApplicationBuilder(args);
+    //
+    // Pin the content root to the install directory. Claude Desktop starts MCP servers
+    // with cwd "/", and the host's default appsettings reload watcher would otherwise
+    // watch the whole filesystem, holding memory for every file event on the machine.
+    var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+    {
+        Args = args,
+        ContentRootPath = AppContext.BaseDirectory,
+    });
 
     ConfigureServices(builder.Services, builder.Configuration);
 
