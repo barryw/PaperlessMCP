@@ -34,7 +34,10 @@ if (useStdio)
     builder.Services
         .AddMcpServer()
         .WithStdioServerTransport()
-        .WithToolsFromAssembly();
+        .WithToolsFromAssembly()
+        .WithRequestFilters(filters => filters.AddListToolsFilter(
+            next => async (context, cancellationToken) =>
+                NullableSchemaCompatibility.Apply(await next(context, cancellationToken).ConfigureAwait(false))));
 
     await builder.Build().RunAsync();
 }
@@ -53,7 +56,10 @@ else
             // The SDK's IdleTrackingBackgroundService respects InfiniteTimeSpan to skip idle-based pruning
             options.IdleTimeout = Timeout.InfiniteTimeSpan;
         })
-        .WithToolsFromAssembly();
+        .WithToolsFromAssembly()
+        .WithRequestFilters(filters => filters.AddListToolsFilter(
+            next => async (context, cancellationToken) =>
+                NullableSchemaCompatibility.Apply(await next(context, cancellationToken).ConfigureAwait(false))));
 
     var app = builder.Build();
 
