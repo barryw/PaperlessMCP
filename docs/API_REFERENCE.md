@@ -138,7 +138,7 @@ Update document metadata.
 | `correspondent` | int | No | - | Correspondent ID (use -1 to clear) |
 | `documentType` | int | No | - | Document type ID (use -1 to clear) |
 | `storagePath` | int | No | - | Storage path ID (use -1 to clear) |
-| `tags` | string | No | - | Tag IDs to set (comma-separated) |
+| `tags` | integer array or string | No | - | Tag IDs to set; use `[19]` or `"19,20"`. `[]` clears tags. |
 | `archiveSerialNumber` | int | No | - | Archive serial number |
 | `created` | string | No | - | Created date (YYYY-MM-DD) |
 

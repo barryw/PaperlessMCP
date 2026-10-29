@@ -638,7 +638,7 @@ public static class DocumentTools
         [Description("Correspondent ID (optional, use -1 to clear)")] int? correspondent = null,
         [Description("Document type ID (optional, use -1 to clear)")] int? documentType = null,
         [Description("Storage path ID (optional, use -1 to clear)")] int? storagePath = null,
-        [Description("Tag IDs to set (comma-separated, optional)")] string? tags = null,
+        [Description("Tag IDs to set as an integer array or comma-separated string (optional; [] clears tags)")] JsonElement? tags = null,
         [Description("Archive serial number (optional)")] int? archiveSerialNumber = null,
         [Description("Created date (YYYY-MM-DD, optional)")] string? created = null,
         [Description("Include the document's full OCR content in the response (default: false). Leave false for metadata-only updates to save tokens.")] bool includeContent = false)
@@ -656,13 +656,41 @@ public static class DocumentTools
             return JsonSerializer.Serialize(errorResponse);
         }
 
+        List<int>? parsedTags = null;
+        if (tags is { ValueKind: not JsonValueKind.Null } tagValue)
+        {
+            if (tagValue.ValueKind == JsonValueKind.Array)
+            {
+                try { parsedTags = tagValue.Deserialize<List<int>>(); }
+                catch (JsonException) { }
+            }
+            else if (tagValue.ValueKind == JsonValueKind.String)
+            {
+                var tagString = tagValue.GetString()!;
+                var parsed = ParseIntArray(tagString);
+                if (parsed is not null && parsed.Length == tagString.Split(',').Length)
+                    parsedTags = parsed.ToList();
+            }
+
+            if (parsedTags is null && !(tagValue.ValueKind == JsonValueKind.String &&
+                string.IsNullOrWhiteSpace(tagValue.GetString())))
+            {
+                var errorResponse = McpErrorResponse.Create(
+                    ErrorCodes.Validation,
+                    "tags must be an array of integer IDs or a comma-separated list of integer IDs",
+                    meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
+                );
+                return JsonSerializer.Serialize(errorResponse);
+            }
+        }
+
         var request = new DocumentUpdateRequest
         {
             Title = title,
             Correspondent = correspondent == -1 ? null : correspondent,
             DocumentType = documentType == -1 ? null : documentType,
             StoragePath = storagePath == -1 ? null : storagePath,
-            Tags = ParseIntArray(tags)?.ToList(),
+            Tags = parsedTags,
             ArchiveSerialNumber = archiveSerialNumber,
             Created = ParseDate(created)
         };

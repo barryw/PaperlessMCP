@@ -50,4 +50,15 @@ public class ToolNamingTests
         dotNames.Should().BeEmpty(
             $"dots are not allowed in tool names, but found: {string.Join(", ", dotNames)}");
     }
+
+    [Fact]
+    public void DocumentUpdateTagsSchema_AcceptsArraysAndStrings()
+    {
+        var method = typeof(PaperlessMCP.Tools.DocumentTools).GetMethod(nameof(PaperlessMCP.Tools.DocumentTools.Update))!;
+        var schema = McpServerTool.Create(method, (object?)null).ProtocolTool.InputSchema;
+        var tags = schema.GetProperty("properties").GetProperty("tags");
+
+        tags.TryGetProperty("type", out _).Should().BeFalse();
+        tags.GetProperty("description").GetString().Should().Contain("integer array or comma-separated string");
+    }
 }
