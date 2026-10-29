@@ -968,6 +968,73 @@ public class DocumentToolsTests : IDisposable
         json.RootElement.GetProperty("result").GetProperty("title").GetString().Should().Be("Updated Title");
     }
 
+    [Theory]
+    [InlineData("[19]", new[] { 19 })]
+    [InlineData("\"19,20\"", new[] { 19, 20 })]
+    [InlineData("[]", new int[0])]
+    public async Task Update_WithTags_SendsAndReturnsRequestedTagIds(string tagsJson, int[] expectedTags)
+    {
+        string? requestBody = null;
+        _factory.MockHandler
+            .When(HttpMethod.Patch, "https://paperless.example.com/api/documents/1/")
+            .With(request =>
+            {
+                requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+                return true;
+            })
+            .Respond("application/json", JsonSerializer.Serialize(
+                TestFixtures.Documents.CreateDocument() with { Tags = expectedTags.ToList() }));
+
+        var tags = JsonDocument.Parse(tagsJson).RootElement.Clone();
+        var result = await DocumentTools.Update(_factory.Client, 1, tags: tags);
+
+        requestBody.Should().NotBeNull();
+        JsonDocument.Parse(requestBody!).RootElement.GetProperty("tags").EnumerateArray()
+            .Select(tag => tag.GetInt32()).Should().Equal(expectedTags);
+        var response = JsonDocument.Parse(result).RootElement;
+        response.GetProperty("ok").GetBoolean().Should().BeTrue();
+        response.GetProperty("result").GetProperty("tags").EnumerateArray()
+            .Select(tag => tag.GetInt32()).Should().Equal(expectedTags);
+    }
+
+    [Theory]
+    [InlineData("\"[19]\"")]
+    [InlineData("\"19,bad\"")]
+    [InlineData("[\"19\"]")]
+    public async Task Update_WithInvalidTags_ReturnsValidationErrorWithoutPatching(string tagsJson)
+    {
+        var patch = _factory.MockHandler.When(HttpMethod.Patch, "https://paperless.example.com/api/documents/1/")
+            .Respond("application/json", "{}");
+        var tags = JsonDocument.Parse(tagsJson).RootElement.Clone();
+
+        var result = await DocumentTools.Update(_factory.Client, 1, tags: tags);
+
+        var response = JsonDocument.Parse(result).RootElement;
+        response.GetProperty("ok").GetBoolean().Should().BeFalse();
+        response.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+        _factory.MockHandler.GetMatchCount(patch).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Update_WithEmptyTagString_OmitsTagsFromPatch()
+    {
+        string? requestBody = null;
+        _factory.MockHandler
+            .When(HttpMethod.Patch, "https://paperless.example.com/api/documents/1/")
+            .With(request =>
+            {
+                requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+                return true;
+            })
+            .Respond("application/json", TestFixtures.Documents.CreateDocumentJson());
+
+        var tags = JsonDocument.Parse("\"\"").RootElement.Clone();
+        var result = await DocumentTools.Update(_factory.Client, 1, tags: tags);
+
+        JsonDocument.Parse(result).RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+        JsonDocument.Parse(requestBody!).RootElement.TryGetProperty("tags", out _).Should().BeFalse();
+    }
+
     [Fact]
     public async Task Update_ByDefault_OmitsContentToSaveTokens()
     {
