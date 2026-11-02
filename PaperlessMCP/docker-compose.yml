@@ -17,6 +17,8 @@ services:
       - MCP_LOG_LEVEL=${MCP_LOG_LEVEL:-Information}
       # Optional: Maximum page size for paginated requests (default: 100)
       - MAX_PAGE_SIZE=${MAX_PAGE_SIZE:-100}
+      # Optional: Maximum file size returned inline as base64 (default: 12 KB)
+      - MAX_INLINE_BASE64_BYTES=${MAX_INLINE_BASE64_BYTES:-12288}
       # Optional: MCP server port (default: 5000)
       - MCP_PORT=${MCP_PORT:-5000}
       # Optional: Normalize MCP Accept headers for clients that cannot send both required media types

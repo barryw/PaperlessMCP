@@ -125,19 +125,12 @@ public static class DocumentTools
         return JsonSerializer.Serialize(response);
     }
 
-    /// <summary>
-    /// Upper bound on the raw file size returnable inline as base64. base64 inflates by ~4/3
-    /// and the whole tool response must fit the model's tool-output budget, so this is kept
-    /// deliberately small: anything larger must go through paperless_documents_export_to_outbox.
-    /// </summary>
-    private const int MaxInlineBase64Bytes = 12 * 1024;
-
     [McpServerTool(Name = "paperless_documents_download")]
     [Description("Get download URLs for a document's original file, preview, and thumbnail. Set returnBase64=true to also inline the file bytes as base64, but only for tiny files: use paperless_documents_export_to_outbox for anything real.")]
     public static async Task<string> Download(
         PaperlessClient client,
         [Description("Document ID")] int id,
-        [Description("Also return the file content as base64 (only allowed for tiny files, ~12 KB). Use paperless_documents_export_to_outbox otherwise.")] bool returnBase64 = false)
+        [Description("Also return the file content as base64. Allowed only for small files (default limit ~12 KB, configurable via MAX_INLINE_BASE64_BYTES). Use paperless_documents_export_to_outbox otherwise.")] bool returnBase64 = false)
     {
         var document = await client.GetDocumentAsync(id).ConfigureAwait(false);
 
@@ -162,6 +155,8 @@ public static class DocumentTools
             return JsonSerializer.Serialize(response);
         }
 
+        var maxInlineBytes = client.MaxInlineBase64Bytes;
+
         var (file, error) = await client.OpenDocumentFileAsync(id).ConfigureAwait(false);
         if (error != null || file == null)
         {
@@ -181,7 +176,7 @@ public static class DocumentTools
             bool exceeded;
             try
             {
-                (content, exceeded) = await file.ReadAtMostAsync(MaxInlineBase64Bytes).ConfigureAwait(false);
+                (content, exceeded) = await file.ReadAtMostAsync(maxInlineBytes).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -198,10 +193,10 @@ public static class DocumentTools
             {
                 var size = file.ContentLength is { } length
                     ? $"{length} bytes"
-                    : $"larger than {MaxInlineBase64Bytes} bytes";
+                    : $"larger than {maxInlineBytes} bytes";
                 var errorResponse = McpErrorResponse.Create(
                     ErrorCodes.Validation,
-                    $"File is {size}; too large to inline as base64 (limit {MaxInlineBase64Bytes}). Use paperless_documents_export_to_outbox instead.",
+                    $"File is {size}; too large to inline as base64 (limit {maxInlineBytes}). Use paperless_documents_export_to_outbox instead.",
                     meta: new McpMeta { PaperlessBaseUrl = client.BaseUrl }
                 );
                 return JsonSerializer.Serialize(errorResponse);
