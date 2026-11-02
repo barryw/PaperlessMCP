@@ -100,6 +100,14 @@ public static class HealthTools
                     update = "/api/custom_fields/{id}/",
                     delete = "/api/custom_fields/{id}/"
                 },
+                workflows = new
+                {
+                    list = "/api/workflows/",
+                    get = "/api/workflows/{id}/",
+                    create = "/api/workflows/",
+                    update = "/api/workflows/{id}/",
+                    delete = "/api/workflows/{id}/"
+                },
                 bulk_operations = "/api/bulk_edit_objects/"
             },
             bulk_edit_methods = new[]
