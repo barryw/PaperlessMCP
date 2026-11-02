@@ -46,6 +46,16 @@ public class PaperlessClient
     public string OutboxDirectory => _options.OutboxDirectory;
 
     /// <summary>
+    /// Effective upper bound (in bytes) on the file size that
+    /// <c>paperless_documents_download</c> inlines as base64, falling back to
+    /// <see cref="PaperlessOptions.DefaultMaxInlineBase64Bytes"/> when not configured to a
+    /// positive value.
+    /// </summary>
+    public int MaxInlineBase64Bytes => _options.MaxInlineBase64Bytes > 0
+        ? _options.MaxInlineBase64Bytes
+        : PaperlessOptions.DefaultMaxInlineBase64Bytes;
+
+    /// <summary>
     /// Normalizes a requested page size to the configured positive upper bound.
     /// </summary>
     public int GetEffectivePageSize(int? requestedPageSize = null)
