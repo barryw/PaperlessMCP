@@ -92,25 +92,27 @@ public sealed class DocumentFileResponse : IAsyncDisposable
         int maxBytes,
         CancellationToken cancellationToken = default)
     {
-        var buffer = new byte[maxBytes + 1];
-        var filled = 0;
+        var buffer = new byte[(int)Math.Min(CopyBufferSize, (long)maxBytes + 1)];
+        using var bytes = new MemoryStream();
 
         using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         ArmStallTimeout(stall);
 
-        while (filled < buffer.Length)
+        while (bytes.Length <= maxBytes)
         {
-            var read = await _content.ReadAsync(buffer.AsMemory(filled), stall.Token).ConfigureAwait(false);
+            var remaining = (long)maxBytes + 1 - bytes.Length;
+            var read = await _content.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), stall.Token)
+                .ConfigureAwait(false);
             if (read == 0)
             {
                 break;
             }
 
-            filled += read;
+            bytes.Write(buffer, 0, read);
             ArmStallTimeout(stall);
         }
 
-        return filled > maxBytes ? ([], true) : (buffer[..filled], false);
+        return bytes.Length > maxBytes ? ([], true) : (bytes.ToArray(), false);
     }
 
     /// <summary>

@@ -816,6 +816,36 @@ public class DocumentToolsTests : IDisposable
         Convert.FromBase64String(res.GetProperty("content_base64").GetString()!).Should().Equal(FakePdfBytes);
     }
 
+    [Theory]
+    [InlineData(20 * 1024, true)]
+    [InlineData(0, false)]
+    [InlineData(-1, false)]
+    public async Task Download_WithReturnBase64_UsesConfiguredLimit(int configuredLimit, bool expectedSuccess)
+    {
+        _factory.Options.MaxInlineBase64Bytes = configuredLimit;
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadBytes(1, new byte[13 * 1024]);
+
+        var result = await DocumentTools.Download(_factory.Client, 1, returnBase64: true);
+
+        var response = JsonDocument.Parse(result).RootElement;
+        response.GetProperty("ok").GetBoolean().Should().Be(expectedSuccess);
+        if (!expectedSuccess)
+            response.GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION");
+    }
+
+    [Fact]
+    public async Task Download_WithReturnBase64_MaxIntLimit_DoesNotOverflow()
+    {
+        _factory.Options.MaxInlineBase64Bytes = int.MaxValue;
+        _factory.SetupGet("api/documents/1/", TestFixtures.Documents.CreateDocumentJson(1, "Test Doc"));
+        SetupDownloadBytes(1, FakePdfBytes);
+
+        var result = await DocumentTools.Download(_factory.Client, 1, returnBase64: true);
+
+        JsonDocument.Parse(result).RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
+    }
+
     [Fact]
     public async Task Download_WithReturnBase64_WhenTooLarge_ReturnsValidationError()
     {
@@ -1743,7 +1773,6 @@ public class DocumentToolsTests : IDisposable
     }
 
     #endregion
-    /// <summary>Mirrors DocumentTools.MaxInlineBase64Bytes, which is private.</summary>
     private const int MaxInlineBase64BytesForTests = 12 * 1024;
 
     private abstract class TestBodyStream : Stream
